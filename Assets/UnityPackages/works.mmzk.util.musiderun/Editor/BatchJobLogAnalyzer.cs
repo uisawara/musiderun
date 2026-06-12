@@ -13,12 +13,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return false;
             }
 
-            string content;
-            try
-            {
-                content = File.ReadAllText(logFilePath);
-            }
-            catch
+            if (!LogFileReader.TryReadAllText(logFilePath, out var content))
             {
                 return false;
             }

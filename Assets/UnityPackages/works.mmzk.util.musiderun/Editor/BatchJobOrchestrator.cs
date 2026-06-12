@@ -500,9 +500,9 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 execution.Runner.PollLogFile(execution.LogFilePath);
                 var exitCode = execution.Runner.WaitForExit();
                 var batchArguments = execution.Definition.batchArguments;
-                var isTests = BatchJobCommandLineParser.ContainsArgument(
-                    BatchJobCommandLineParser.Parse(batchArguments),
-                    "-runTests");
+                var parsedArguments = BatchJobCommandLineParser.Parse(batchArguments);
+                var isTests = BatchJobCommandLineParser.ContainsArgument(parsedArguments, "-runTests");
+                var isBuild = BatchJobCommandLineParser.ContainsArgument(parsedArguments, "-executeMethod");
                 if (BatchJobLogAnalyzer.TryInferExitCode(
                         execution.LogFilePath,
                         batchArguments,
@@ -511,6 +511,12 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     if (exitCode < 0 || (isTests && exitCode == 0 && inferredExitCode != 0))
                     {
                         exitCode = inferredExitCode;
+                    }
+                    else if (isBuild && inferredExitCode == 0)
+                    {
+                        // Windows ではビルド成功後のシャットダウン時にメモリリーク検出等で
+                        // プロセス終了コードが非ゼロになることがある。ログ上の成功を優先する。
+                        exitCode = 0;
                     }
                 }
 
@@ -706,10 +712,22 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 ErrorMessage = result.ErrorMessage
             };
 
-            if (!BatchJobLogHtmlRenderer.TryRender(request, out var error))
+            const int maxAttempts = 5;
+            var lastError = string.Empty;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
-                _log($"[WARN] [{result.JobId}] HTML ログの生成に失敗: {error}");
+                if (BatchJobLogHtmlRenderer.TryRender(request, out lastError))
+                {
+                    return;
+                }
+
+                if (attempt < maxAttempts - 1)
+                {
+                    Thread.Sleep(150);
+                }
             }
+
+            _log($"[WARN] [{result.JobId}] HTML ログの生成に失敗: {lastError}");
         }
 
         private bool IsJobFailed(
@@ -723,14 +741,29 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return true;
             }
 
-            if (exitCode > 0)
-            {
-                return true;
-            }
-
             if (exitCode == 0)
             {
                 return false;
+            }
+
+            var isBuild = BatchJobCommandLineParser.ContainsArgument(
+                BatchJobCommandLineParser.Parse(execution.Definition.batchArguments),
+                "-executeMethod");
+            if (isBuild &&
+                !string.IsNullOrEmpty(buildOutput) &&
+                File.Exists(buildOutput) &&
+                BatchJobLogAnalyzer.TryInferExitCode(
+                    execution.LogFilePath,
+                    execution.Definition.batchArguments,
+                    out var inferredExitCode) &&
+                inferredExitCode == 0)
+            {
+                return false;
+            }
+
+            if (exitCode > 0)
+            {
+                return true;
             }
 
             if (!string.IsNullOrEmpty(buildOutput) && File.Exists(buildOutput))

@@ -88,7 +88,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
             if (!string.IsNullOrEmpty(request.MirrorLogFilePath) && File.Exists(request.MirrorLogFilePath))
             {
-                foreach (var rawLine in File.ReadAllLines(request.MirrorLogFilePath))
+                foreach (var rawLine in LogFileReader.ReadAllLines(request.MirrorLogFilePath))
                 {
                     var text = NormalizeLine(rawLine);
                     if (string.IsNullOrWhiteSpace(text))
@@ -103,7 +103,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             if (!string.IsNullOrEmpty(request.UnityLogFilePath) && File.Exists(request.UnityLogFilePath))
             {
                 var unitySection = SectionOther;
-                foreach (var rawLine in File.ReadAllLines(request.UnityLogFilePath))
+                foreach (var rawLine in LogFileReader.ReadAllLines(request.UnityLogFilePath))
                 {
                     var text = NormalizeLine(rawLine);
                     if (string.IsNullOrWhiteSpace(text))

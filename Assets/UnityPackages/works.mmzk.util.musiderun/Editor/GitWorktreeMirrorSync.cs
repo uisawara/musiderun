@@ -44,29 +44,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 : MirrorWorktreeStatus.NotCreated;
         }
 
-        public async Task EnsureMirrorForJobAsync(
-            MusiderunSettingsData data,
-            BatchJobDefinitionData job,
-            CancellationToken cancellationToken = default)
-        {
-            var context = RequireContext(data, job.id);
-            _log($"[{job.id}] ミラー worktree を確認します: {context.MirrorPath}");
-
-            await EnsureMirrorBranchAsync(
-                    context.GitExecutable,
-                    context.RepositoryRoot,
-                    context.BranchName,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            await EnsureWorktreeAsync(
-                    context.GitExecutable,
-                    context.RepositoryRoot,
-                    context.MirrorPath,
-                    context.BranchName,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-
         public async Task SyncJobAsync(
             MusiderunSettingsData data,
             BatchJobDefinitionData job,
@@ -76,7 +53,11 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             try
             {
                 var context = RequireContext(data, job.id);
-                await EnsureMirrorForJobAsync(data, job, cancellationToken).ConfigureAwait(false);
+                var diffBefore = await GetWorkingTreeDiffAsync(
+                        context.GitExecutable,
+                        context.RepositoryRoot,
+                        cancellationToken)
+                    .ConfigureAwait(false);
 
                 _log($"[{job.id}] === ミラー同期 ===");
                 _log($"[{job.id}] リポジトリ: {context.RepositoryRoot}");
@@ -91,6 +72,18 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                         job.id,
                         cancellationToken)
                     .ConfigureAwait(false);
+
+                var diffAfter = await GetWorkingTreeDiffAsync(
+                        context.GitExecutable,
+                        context.RepositoryRoot,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!string.Equals(diffBefore, diffAfter, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "ミラー同期後にメイン作業ツリーの差分が変化しました。安全のため Job を中断しました。");
+                }
             }
             finally
             {
@@ -170,52 +163,104 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 PlatformUtility.ResolveMirrorBranch(data, jobId));
         }
 
-        private async Task EnsureMirrorBranchAsync(
+        private async Task CreateSnapshotAndResetAsync(
             string gitExecutable,
             string repositoryRoot,
+            string mirrorPath,
             string branchName,
+            string jobId,
             CancellationToken cancellationToken)
         {
-            if (await BranchExistsAsync(gitExecutable, repositoryRoot, branchName, cancellationToken)
-                    .ConfigureAwait(false))
-            {
-                return;
-            }
-
-            var originalBranch = await GetCurrentBranchAsync(gitExecutable, repositoryRoot, cancellationToken)
+            await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "add", "-A")
                 .ConfigureAwait(false);
 
-            try
+            var treeResult = await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "write-tree")
+                .ConfigureAwait(false);
+            var treeHash = treeResult.StandardOutput.Trim();
+            if (string.IsNullOrEmpty(treeHash))
             {
-                await RunGitAsync(
+                throw new InvalidOperationException("git write-tree が空のハッシュを返しました。");
+            }
+
+            var branchExists = await BranchExistsAsync(
+                    gitExecutable,
+                    repositoryRoot,
+                    branchName,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var parentHash = branchExists
+                ? await TryGetBranchHeadAsync(gitExecutable, repositoryRoot, branchName, cancellationToken)
+                    .ConfigureAwait(false)
+                : string.Empty;
+            var message = $"batchjob snapshot {jobId} {DateTime.Now:yyyy-MM-ddTHH:mm:ss}";
+
+            ProcessResult commitResult;
+            if (string.IsNullOrEmpty(parentHash))
+            {
+                commitResult = await RunGitAsync(
                         gitExecutable,
                         repositoryRoot,
                         cancellationToken,
-                        "checkout",
-                        "--orphan",
-                        branchName)
-                    .ConfigureAwait(false);
-                await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "reset", "--hard")
-                    .ConfigureAwait(false);
-                await RunGitAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        cancellationToken,
-                        "commit",
-                        "--allow-empty",
+                        "commit-tree",
+                        treeHash,
                         "-m",
-                        "batchjob mirror init")
+                        message)
                     .ConfigureAwait(false);
             }
-            finally
+            else
             {
-                if (!string.IsNullOrEmpty(originalBranch) &&
-                    !string.Equals(originalBranch, branchName, StringComparison.Ordinal))
-                {
-                    await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "checkout", originalBranch)
-                        .ConfigureAwait(false);
-                }
+                commitResult = await RunGitAsync(
+                        gitExecutable,
+                        repositoryRoot,
+                        cancellationToken,
+                        "commit-tree",
+                        treeHash,
+                        "-p",
+                        parentHash,
+                        "-m",
+                        message)
+                    .ConfigureAwait(false);
             }
+
+            var commitHash = commitResult.StandardOutput.Trim();
+            if (string.IsNullOrEmpty(commitHash))
+            {
+                throw new InvalidOperationException("git commit-tree が空のハッシュを返しました。");
+            }
+
+            if (!branchExists)
+            {
+                _log($"[{jobId}] mirror ブランチを作成します: {branchName}");
+                await RunGitAsync(
+                        gitExecutable,
+                        repositoryRoot,
+                        cancellationToken,
+                        "branch",
+                        branchName,
+                        commitHash)
+                    .ConfigureAwait(false);
+            }
+
+            if (!await IsWorktreeRegisteredAsync(gitExecutable, repositoryRoot, mirrorPath, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                await EnsureWorktreeAsync(
+                        gitExecutable,
+                        repositoryRoot,
+                        mirrorPath,
+                        branchName,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            _log($"[{jobId}] ミラー worktree を同期します: {commitHash[..Math.Min(8, commitHash.Length)]}");
+            await RunGitAsync(gitExecutable, mirrorPath, cancellationToken, "reset", "--hard", commitHash)
+                .ConfigureAwait(false);
+
+            await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "reset")
+                .ConfigureAwait(false);
+
+            _log($"[{jobId}] 同期完了。");
         }
 
         private async Task EnsureWorktreeAsync(
@@ -275,85 +320,25 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 .ConfigureAwait(false);
         }
 
-        private async Task CreateSnapshotAndResetAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            string mirrorPath,
-            string branchName,
-            string jobId,
-            CancellationToken cancellationToken)
-        {
-            await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "add", "-A")
-                .ConfigureAwait(false);
-
-            var treeResult = await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "write-tree")
-                .ConfigureAwait(false);
-            var treeHash = treeResult.StandardOutput.Trim();
-            if (string.IsNullOrEmpty(treeHash))
-            {
-                throw new InvalidOperationException("git write-tree が空のハッシュを返しました。");
-            }
-
-            var parentHash = await TryGetBranchHeadAsync(
-                    gitExecutable,
-                    repositoryRoot,
-                    branchName,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            var message = $"batchjob snapshot {jobId} {DateTime.Now:yyyy-MM-ddTHH:mm:ss}";
-
-            ProcessResult commitResult;
-            if (string.IsNullOrEmpty(parentHash))
-            {
-                commitResult = await RunGitAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        cancellationToken,
-                        "commit-tree",
-                        treeHash,
-                        "-m",
-                        message)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                commitResult = await RunGitAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        cancellationToken,
-                        "commit-tree",
-                        treeHash,
-                        "-p",
-                        parentHash,
-                        "-m",
-                        message)
-                    .ConfigureAwait(false);
-            }
-
-            var commitHash = commitResult.StandardOutput.Trim();
-            if (string.IsNullOrEmpty(commitHash))
-            {
-                throw new InvalidOperationException("git commit-tree が空のハッシュを返しました。");
-            }
-
-            _log($"[{jobId}] ミラー worktree を同期します: {commitHash[..Math.Min(8, commitHash.Length)]}");
-            await RunGitAsync(gitExecutable, mirrorPath, cancellationToken, "reset", "--hard", commitHash)
-                .ConfigureAwait(false);
-            _log($"[{jobId}] 同期完了。");
-        }
-
-        private async Task<string> GetCurrentBranchAsync(
+        private static async Task<string> GetWorkingTreeDiffAsync(
             string gitExecutable,
             string repositoryRoot,
             CancellationToken cancellationToken)
         {
             var result = await PlatformUtility.RunProcessAsync(
                     gitExecutable,
-                    new[] { "rev-parse", "--abbrev-ref", "HEAD" },
+                    new[] { "diff", "HEAD" },
                     repositoryRoot,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            return result.Succeeded ? result.StandardOutput.Trim() : string.Empty;
+
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    $"git diff HEAD が失敗しました (exit {result.ExitCode}): {result.StandardError}");
+            }
+
+            return result.StandardOutput;
         }
 
         private async Task<bool> BranchExistsAsync(

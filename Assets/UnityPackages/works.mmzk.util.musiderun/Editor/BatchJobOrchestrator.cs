@@ -98,7 +98,8 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
             if (!GitWorktreeMirrorSync.TrySaveProjectStateOnMainThread())
             {
-                _log("[WARN] Play モード中のため未保存の変更はディスクに書き出されません。スナップショットは最後に保存された状態を使用します。");
+                _log("[ERROR] Cannot run jobs during Play mode. Exit Play mode and save your work first.");
+                return;
             }
 
             _operationCts = new CancellationTokenSource();

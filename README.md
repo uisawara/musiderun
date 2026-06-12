@@ -68,6 +68,7 @@ parent/
 - ログ・ビルド成果物も、原則としてミラー worktree 側（`BatchJobLogs/` や `artifactFolder`）に出力されます
 - `musiderun/mirror-{jobId}` ブランチはローカル git に作成されます（通常は push 不要）
 - **clone 先フォルダを削除しても、外側の worktree は自動では消えません**。不要になったら `git worktree remove` やディレクトリ削除で手動整理してください
+- Job 実行はメインプロジェクトの未コミット変更を消しません（ミラー worktree / mirror ブランチのみ更新）。Play モード中は Job を実行できません
 
 ## ドキュメント
 

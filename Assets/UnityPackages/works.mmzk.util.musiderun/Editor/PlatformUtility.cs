@@ -121,6 +121,33 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
         }
 
+        public static string GetRepositoryBatchJobLogsPath()
+        {
+            return NormalizeDirectoryPath(Path.Combine(GetRepositoryRoot(), "BatchJobLogs"));
+        }
+
+        public static bool TryDeleteRepositoryBatchJobLogs(out string errorMessage)
+        {
+            errorMessage = string.Empty;
+            var batchJobLogsPath = GetRepositoryBatchJobLogsPath();
+
+            if (!Directory.Exists(batchJobLogsPath))
+            {
+                return true;
+            }
+
+            try
+            {
+                Directory.Delete(batchJobLogsPath, recursive: true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+                return false;
+            }
+        }
+
         public static string ResolveLogOutputDirectory(
             MusiderunSettingsData data,
             string mirrorPath,

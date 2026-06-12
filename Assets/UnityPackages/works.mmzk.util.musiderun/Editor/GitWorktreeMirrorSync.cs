@@ -10,7 +10,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 {
     public sealed class GitWorktreeMirrorSync
     {
-        private static readonly SemaphoreSlim RepositoryGitLock = new(1, 1);
+        internal static readonly SemaphoreSlim RepositoryGitLock = new(1, 1);
 
         private readonly Action<string> _log;
 

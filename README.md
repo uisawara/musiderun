@@ -55,26 +55,14 @@ git clone https://github.com/uisawara/musiderun.git
 
 ## 注意: git worktree は clone 先の外に作られます
 
-musiderun は Job 実行時に **ミラー用 git worktree** を自動作成します。既定では clone したリポジトリの**外**（プロジェクトルートの兄弟ディレクトリ）に置かれます。
+Job 実行時にミラー用 git worktree がプロジェクトの**外**（既定: `../{プロジェクト名}-musiderun-{jobId}`）に自動作成されます。**clone 先を削除しても worktree は残る**ため、不要時は手動で整理してください。
 
-```
-parent/
-├── musiderun/                    ← git clone した作業コピー
-└── musiderun-musiderun-build/    ← Job 用 worktree（例: jobId = build）
-```
-
-- 既定パス: `../{プロジェクト名}-musiderun-{jobId}`（`Assets` の親ディレクトリの外）
-- 変更する場合: `Assets/Settings/MusiderunSettings.json` の `mirrorWorktreeBasePath` を指定（**リポジトリ配下には置けません**）
-- ログ・ビルド成果物も、原則としてミラー worktree 側（`BatchJobLogs/` や `artifactFolder`）に出力されます
-- `musiderun/mirror-{jobId}` ブランチはローカル git に作成されます（通常は push 不要）
-- **clone 先フォルダを削除しても、外側の worktree は自動では消えません**。不要になったら `git worktree remove` やディレクトリ削除で手動整理してください
-- Job 実行はメインプロジェクトの未コミット変更を消しません（ミラー worktree / mirror ブランチのみ更新）。Play モード中は Job を実行できません
+詳細は [Docs/worktree.md](Docs/worktree.md) を参照してください。
 
 ## ドキュメント
 
-使い方・設定・ログレポートの詳細はパッケージ README を参照してください。
-
-- [Assets/UnityPackages/works.mmzk.util.musiderun/README.md](Assets/UnityPackages/works.mmzk.util.musiderun/README.md)
+- [Docs 一覧](Docs/index.md) — 設定・同期の仕組み・ログレポートなど技術詳細
+- [パッケージ README](Assets/UnityPackages/works.mmzk.util.musiderun/README.md) — 基本操作
 
 ## ライセンス
 

@@ -746,16 +746,18 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return false;
             }
 
+            var hasInferredExitCode = BatchJobLogAnalyzer.TryInferExitCode(
+                execution.LogFilePath,
+                execution.Definition.batchArguments,
+                out var inferredExitCode);
+
             var isBuild = BatchJobCommandLineParser.ContainsArgument(
                 BatchJobCommandLineParser.Parse(execution.Definition.batchArguments),
                 "-executeMethod");
             if (isBuild &&
                 !string.IsNullOrEmpty(buildOutput) &&
                 File.Exists(buildOutput) &&
-                BatchJobLogAnalyzer.TryInferExitCode(
-                    execution.LogFilePath,
-                    execution.Definition.batchArguments,
-                    out var inferredExitCode) &&
+                hasInferredExitCode &&
                 inferredExitCode == 0)
             {
                 return false;
@@ -776,10 +778,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return false;
             }
 
-            if (BatchJobLogAnalyzer.TryInferExitCode(
-                    execution.LogFilePath,
-                    execution.Definition.batchArguments,
-                    out var inferredExitCode))
+            if (hasInferredExitCode)
             {
                 return inferredExitCode != 0;
             }

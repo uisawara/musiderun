@@ -29,7 +29,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
         public static void ShowWindow()
         {
-            var window = GetWindow<MusiderunWindow>("Musiderun");
+            var window = GetWindow<MusiderunWindow>("musiderun");
             window.minSize = new Vector2(320f, 240f);
             window.Show();
         }
@@ -148,7 +148,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         private void DrawJsonMissingUI()
         {
             EditorGUILayout.Space(8f);
-            EditorGUILayout.LabelField("Musiderun", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("musiderun", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 $"JSON 設定ファイルが見つかりません。\n{MusiderunSettingsJsonStore.JsonAssetPath}",
                 MessageType.Warning);

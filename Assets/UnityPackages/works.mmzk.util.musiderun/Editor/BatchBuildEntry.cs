@@ -23,7 +23,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
             if (scenes.Length == 0)
             {
-                Debug.LogError("[Musiderun] 有効なビルドシーンがありません。");
+                Debug.LogError("[musiderun] 有効なビルドシーンがありません。");
                 EditorApplication.Exit(1);
                 return;
             }
@@ -35,20 +35,20 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 Directory.CreateDirectory(outputDirectory);
             }
 
-            Debug.Log($"[Musiderun] Build start: target={buildTarget}, output={outputLocation}");
+            Debug.Log($"[musiderun] Build start: target={buildTarget}, output={outputLocation}");
 
             var report = BuildPipeline.BuildPlayer(scenes, outputLocation, buildTarget, BuildOptions.None);
             var summary = report.summary;
 
             if (summary.result == BuildResult.Succeeded)
             {
-                Debug.Log($"[Musiderun] Build succeeded: {summary.outputPath}");
+                Debug.Log($"[musiderun] Build succeeded: {summary.outputPath}");
                 EditorApplication.Exit(0);
                 return;
             }
 
             Debug.LogError(
-                $"[Musiderun] Build failed: result={summary.result}, errors={summary.totalErrors}");
+                $"[musiderun] Build failed: result={summary.result}, errors={summary.totalErrors}");
             EditorApplication.Exit(1);
         }
     }

@@ -30,14 +30,14 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return TryInferTestExitCode(content, out exitCode);
             }
 
-            if (content.Contains("[Musiderun] Build succeeded") ||
+            if (content.Contains("[musiderun] Build succeeded") ||
                 content.Contains("Build Finished, Result: Success"))
             {
                 exitCode = 0;
                 return true;
             }
 
-            if (content.Contains("[Musiderun] Build failed") ||
+            if (content.Contains("[musiderun] Build failed") ||
                 content.Contains("Build Finished, Result: Failed"))
             {
                 exitCode = 1;

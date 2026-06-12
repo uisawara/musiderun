@@ -88,7 +88,7 @@ Job 定義の正は [`Assets/Settings/MusiderunSettings.json`](../../Settings/Mu
 
 | ファイル | 内容 |
 | -------- | ---- |
-| `{jobId}-{timestamp}-mirror.log` | 同期・git・起動コマンド等（Musiderun 側） |
+| `{jobId}-{timestamp}-mirror.log` | 同期・git・起動コマンド等（musiderun 側） |
 | `{jobId}-{timestamp}.log` | Unity バッチ出力 |
 | `{jobId}-{timestamp}.html` | 上記2つを統合した閲覧用レポート |
 
@@ -107,7 +107,7 @@ HTML 上部のタグクラウドでログ行を絞り込めます。
 | 種別 | 例 |
 | ---- | -- |
 | 種類 (Severity) | Error, Warning, Info |
-| セクション (Section) | Musiderun, Licensing, Script Compilation, Test Run など |
+| セクション (Section) | musiderun, Licensing, Script Compilation, Test Run など |
 | ソース (Source) | Mirror, Unity |
 
 - ラベルをクリックするたび、そのラベルの ON/OFF をトグル
@@ -148,7 +148,7 @@ parent/
 | git ブランチ | `musiderun/mirror-{jobId}`（ローカル。通常は push 不要） |
 
 - **clone 先だけ削除しても、外側の worktree や `musiderun/mirror-*` ブランチは残ります**。不要時は `git worktree list` で確認し、`git worktree remove` 等で整理してください
-- ミラー worktree は Musiderun が同期したスナップショット用です。**手動で編集しないでください**
+- ミラー worktree は musiderun が同期したスナップショット用です。**手動で編集しないでください**
 
 ### その他
 

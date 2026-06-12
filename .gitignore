@@ -78,7 +78,7 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 /[Aa]ssets/[Ss]ceneDependencyCache*
 
-# Musiderun（ジョブ実行のログ・成果物）
+# musiderun（ジョブ実行のログ・成果物）
 /[Bb]atch[Jj]ob[Ll]ogs/
 /[Tt]est[Rr]esults/
 

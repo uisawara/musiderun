@@ -55,7 +55,7 @@ git clone https://github.com/uisawara/musiderun.git
 
 ## 注意: git worktree は clone 先の外に作られます
 
-Musiderun は Job 実行時に **ミラー用 git worktree** を自動作成します。既定では clone したリポジトリの**外**（プロジェクトルートの兄弟ディレクトリ）に置かれます。
+musiderun は Job 実行時に **ミラー用 git worktree** を自動作成します。既定では clone したリポジトリの**外**（プロジェクトルートの兄弟ディレクトリ）に置かれます。
 
 ```
 parent/

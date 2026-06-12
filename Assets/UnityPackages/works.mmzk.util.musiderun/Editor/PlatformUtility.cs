@@ -346,7 +346,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"[Musiderun] プロセス中断中にエラー: {ex.Message}");
+                        Debug.LogWarning($"[musiderun] プロセス中断中にエラー: {ex.Message}");
                     }
 
                     tcs.TrySetCanceled(cancellationToken);
@@ -457,7 +457,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"[Musiderun] PATH 検索中にエラー: {ex.Message}");
+                    Debug.LogWarning($"[musiderun] PATH 検索中にエラー: {ex.Message}");
                 }
             }
 

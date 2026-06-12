@@ -76,7 +76,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             builder.AppendLine("<meta charset=\"utf-8\">");
             builder.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
             builder.AppendLine("<meta name=\"color-scheme\" content=\"dark\">");
-            builder.AppendLine($"<title>{Escape(request.DisplayName)} — Musiderun Log</title>");
+            builder.AppendLine($"<title>{Escape(request.DisplayName)} — musiderun log</title>");
             builder.AppendLine("<style>");
             builder.AppendLine(GetStyles());
             builder.AppendLine("</style>");

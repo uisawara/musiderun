@@ -71,7 +71,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             (LabelInfo, "Info", LogLabelCategory.Severity),
             (LabelMirror, "Mirror", LogLabelCategory.Source),
             (LabelUnity, "Unity", LogLabelCategory.Source),
-            (SectionMusiderun, "Musiderun", LogLabelCategory.Section),
+            (SectionMusiderun, "musiderun", LogLabelCategory.Section),
             (SectionCommandLine, "Command Line", LogLabelCategory.Section),
             (SectionLicensing, "Licensing", LogLabelCategory.Section),
             (SectionPackageManager, "Package Manager", LogLabelCategory.Section),

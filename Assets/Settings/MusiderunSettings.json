@@ -1,0 +1,30 @@
+{
+    "version": 1,
+    "unityExecutablePath": "",
+    "logOutputDirectory": "",
+    "mirrorWorktreeBasePath": "",
+    "mirrorBranchPrefix": "musiderun/mirror",
+    "jobs": [
+        {
+            "id": "build",
+            "displayName": "Build",
+            "targetOS": "macOS",
+            "batchArguments": "-executeMethod Works.Mmzk.Util.Musiderun.Editor.BatchBuildEntry.Execute",
+            "artifactFolder": "Builds"
+        },
+        {
+            "id": "tests-editmode",
+            "displayName": "Run Tests - EditMode",
+            "targetOS": "Any",
+            "batchArguments": "-runTests -testPlatform editmode",
+            "artifactFolder": "TestResults"
+        },
+        {
+            "id": "tests-playmode",
+            "displayName": "Run Tests - PlayMode",
+            "targetOS": "Any",
+            "batchArguments": "-runTests -testPlatform playmode",
+            "artifactFolder": "TestResults"
+        }
+    ]
+}

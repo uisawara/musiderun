@@ -1,0 +1,14 @@
+{
+    "name": "works.mmzk.util.musiderun",
+    "rootNamespace": "Works.Mmzk.Util.Musiderun",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

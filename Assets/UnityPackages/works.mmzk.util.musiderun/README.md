@@ -121,7 +121,8 @@ HTML 上部のタグクラウドでログ行を絞り込めます。
 - Job ごとに `musiderun/mirror-{jobId}` ブランチへスナップショットコミットを作成し、ミラー worktree を `reset --hard`
 - `Library/`, `Temp/` 等は `.gitignore` により同期対象外（ミラー側で独自生成）
 - **メインプロジェクトの作業ツリーは変更しません**。mirror ブランチの作成・更新は `commit-tree` / `git branch`（ref 作成のみ）で行い、メインで `checkout` や `reset --hard` は実行しません
-- 同期後に `git diff HEAD` で作業ツリーの整合性を検証し、差分が変わった場合は Job を失敗扱いにします
+- 同期前後で `git stash create` により作業ツリー状態を比較し、変化があれば Job を失敗扱いにします
+- Windows では CRLF 警告を避けるため、スナップショット用 git 操作に `core.autocrlf=false` / `core.safecrlf=false` を適用します
 
 ## 要件
 

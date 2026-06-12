@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
@@ -28,6 +29,29 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 Queue.Enqueue(action);
                 EnsureRegistered();
             }
+        }
+
+        public static Task RunAsync(Action action)
+        {
+            if (action == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            var tcs = new TaskCompletionSource<bool>();
+            Enqueue(() =>
+            {
+                try
+                {
+                    action();
+                    tcs.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            });
+            return tcs.Task;
         }
 
         public static void EnsureRegistered()

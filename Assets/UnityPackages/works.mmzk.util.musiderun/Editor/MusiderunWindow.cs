@@ -208,13 +208,13 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             if (isPlaying)
             {
                 EditorGUILayout.HelpBox(
-                    "Play モード中は未保存の変更をディスクに書き出せません。スナップショットは最後に保存された状態を使用します。",
-                    MessageType.Info);
+                    "Jobs cannot run during Play mode. Exit Play mode and save your work first.",
+                    MessageType.Warning);
             }
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope(Orchestrator.IsBusy))
+                using (new EditorGUI.DisabledScope(Orchestrator.IsBusy || isPlaying))
                 {
                     if (GUILayout.Button("Run Selected", GUILayout.Height(28f)))
                     {
@@ -281,7 +281,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    using (new EditorGUI.DisabledScope(Orchestrator.IsBusy || !osMatches))
+                    using (new EditorGUI.DisabledScope(Orchestrator.IsBusy || isPlaying || !osMatches))
                     {
                         var selected = _jobSelections.TryGetValue(selectionKey, out var value) && value;
                         var newSelected = EditorGUILayout.Toggle(selected, GUILayout.Width(20f));
@@ -292,7 +292,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                         }
                     }
 
-                    using (new EditorGUI.DisabledScope(Orchestrator.IsBusy || !osMatches))
+                    using (new EditorGUI.DisabledScope(Orchestrator.IsBusy || isPlaying || !osMatches))
                     {
                         if (GUILayout.Button("▶", GUILayout.Width(24f)))
                         {

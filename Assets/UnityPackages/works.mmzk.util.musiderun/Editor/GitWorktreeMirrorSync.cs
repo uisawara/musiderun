@@ -52,37 +52,51 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             await RepositoryGitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var context = RequireContext(data, job.id);
-                var diffBefore = await GetWorkingTreeDiffAsync(
-                        context.GitExecutable,
-                        context.RepositoryRoot,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                _log($"[{job.id}] === ミラー同期 ===");
-                _log($"[{job.id}] リポジトリ: {context.RepositoryRoot}");
-                _log($"[{job.id}] ミラー: {context.MirrorPath}");
-                _log($"[{job.id}] ブランチ: {context.BranchName}");
-
-                await CreateSnapshotAndResetAsync(
-                        context.GitExecutable,
-                        context.RepositoryRoot,
-                        context.MirrorPath,
-                        context.BranchName,
-                        job.id,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                var diffAfter = await GetWorkingTreeDiffAsync(
-                        context.GitExecutable,
-                        context.RepositoryRoot,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (!string.Equals(diffBefore, diffAfter, StringComparison.Ordinal))
+                await EditorMainThreadDispatcher.RunAsync(() =>
                 {
-                    throw new InvalidOperationException(
-                        "ミラー同期後にメイン作業ツリーの差分が変化しました。安全のため Job を中断しました。");
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.StartAssetEditing();
+                }).ConfigureAwait(false);
+
+                try
+                {
+                    var context = RequireContext(data, job.id);
+                    var stateBefore = await CaptureWorkingTreeStateAsync(
+                            context.GitExecutable,
+                            context.RepositoryRoot,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    _log($"[{job.id}] === ミラー同期 ===");
+                    _log($"[{job.id}] リポジトリ: {context.RepositoryRoot}");
+                    _log($"[{job.id}] ミラー: {context.MirrorPath}");
+                    _log($"[{job.id}] ブランチ: {context.BranchName}");
+
+                    await CreateSnapshotAndResetAsync(
+                            context.GitExecutable,
+                            context.RepositoryRoot,
+                            context.MirrorPath,
+                            context.BranchName,
+                            job.id,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    var stateAfter = await CaptureWorkingTreeStateAsync(
+                            context.GitExecutable,
+                            context.RepositoryRoot,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (!string.Equals(stateBefore, stateAfter, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            "ミラー同期後にメイン作業ツリーの状態が変化しました。安全のため Job を中断しました。");
+                    }
+                }
+                finally
+                {
+                    await EditorMainThreadDispatcher.RunAsync(AssetDatabase.StopAssetEditing)
+                        .ConfigureAwait(false);
                 }
             }
             finally
@@ -257,10 +271,32 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             await RunGitAsync(gitExecutable, mirrorPath, cancellationToken, "reset", "--hard", commitHash)
                 .ConfigureAwait(false);
 
-            await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "reset")
+            await RestoreMainIndexAsync(gitExecutable, repositoryRoot, cancellationToken)
                 .ConfigureAwait(false);
 
             _log($"[{jobId}] 同期完了。");
+        }
+
+        private static async Task RestoreMainIndexAsync(
+            string gitExecutable,
+            string repositoryRoot,
+            CancellationToken cancellationToken)
+        {
+            await RunGitSnapshotOrThrowAsync(
+                    gitExecutable,
+                    repositoryRoot,
+                    cancellationToken,
+                    "reset",
+                    "--mixed",
+                    "HEAD")
+                .ConfigureAwait(false);
+
+            await PlatformUtility.RunGitSnapshotProcessAsync(
+                    gitExecutable,
+                    new[] { "update-index", "--refresh" },
+                    repositoryRoot,
+                    cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
         }
 
         private async Task EnsureWorktreeAsync(
@@ -320,14 +356,14 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 .ConfigureAwait(false);
         }
 
-        private static async Task<string> GetWorkingTreeDiffAsync(
+        private static async Task<string> CaptureWorkingTreeStateAsync(
             string gitExecutable,
             string repositoryRoot,
             CancellationToken cancellationToken)
         {
-            var result = await PlatformUtility.RunProcessAsync(
+            var result = await PlatformUtility.RunGitSnapshotProcessAsync(
                     gitExecutable,
-                    new[] { "diff", "HEAD" },
+                    new[] { "stash", "create", "--include-untracked" },
                     repositoryRoot,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
@@ -335,10 +371,10 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             if (!result.Succeeded)
             {
                 throw new InvalidOperationException(
-                    $"git diff HEAD が失敗しました (exit {result.ExitCode}): {result.StandardError}");
+                    $"git stash create が失敗しました (exit {result.ExitCode}): {result.StandardError}");
             }
 
-            return result.StandardOutput;
+            return result.StandardOutput.Trim();
         }
 
         private async Task<bool> BranchExistsAsync(
@@ -413,15 +449,49 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             CancellationToken cancellationToken,
             params string[] arguments)
         {
-            var args = new List<string>(arguments);
-            EditorMainThreadDispatcher.Enqueue(() => _log($"> git {string.Join(" ", args)}"));
+            EditorMainThreadDispatcher.Enqueue(() =>
+                _log($"> git -c core.autocrlf=false -c core.safecrlf=false {string.Join(" ", arguments)}"));
 
-            var result = await PlatformUtility.RunProcessAsync(
+            return await RunGitSnapshotOrThrowAsync(
                     gitExecutable,
-                    args,
                     workingDirectory,
+                    cancellationToken,
                     line => _log(line),
                     line => _log($"[stderr] {line}"),
+                    arguments)
+                .ConfigureAwait(false);
+        }
+
+        private static async Task<ProcessResult> RunGitSnapshotOrThrowAsync(
+            string gitExecutable,
+            string workingDirectory,
+            CancellationToken cancellationToken,
+            params string[] arguments)
+        {
+            return await RunGitSnapshotOrThrowAsync(
+                    gitExecutable,
+                    workingDirectory,
+                    cancellationToken,
+                    null,
+                    null,
+                    arguments)
+                .ConfigureAwait(false);
+        }
+
+        private static async Task<ProcessResult> RunGitSnapshotOrThrowAsync(
+            string gitExecutable,
+            string workingDirectory,
+            CancellationToken cancellationToken,
+            Action<string> onStdout,
+            Action<string> onStderr,
+            params string[] arguments)
+        {
+            var result = await PlatformUtility.RunGitSnapshotProcessAsync(
+                    gitExecutable,
+                    arguments,
+                    workingDirectory,
+                    onStdout,
+                    onStderr,
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -431,7 +501,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     ? result.StandardOutput
                     : result.StandardError;
                 throw new InvalidOperationException(
-                    $"git コマンドが失敗しました (exit {result.ExitCode}): git {string.Join(" ", args)}\n{details}");
+                    $"git コマンドが失敗しました (exit {result.ExitCode}): git -c core.autocrlf=false -c core.safecrlf=false {string.Join(" ", arguments)}\n{details}");
             }
 
             return result;

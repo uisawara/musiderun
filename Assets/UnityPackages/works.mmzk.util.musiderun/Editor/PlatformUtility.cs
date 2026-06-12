@@ -30,6 +30,36 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
         public static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
+        private static readonly string[] GitSnapshotConfigOverrides =
+        {
+            "-c", "core.autocrlf=false",
+            "-c", "core.safecrlf=false"
+        };
+
+        public static Task<ProcessResult> RunGitSnapshotProcessAsync(
+            string gitExecutable,
+            IReadOnlyList<string> arguments,
+            string workingDirectory,
+            Action<string> onStdout = null,
+            Action<string> onStderr = null,
+            CancellationToken cancellationToken = default)
+        {
+            var args = new List<string>(GitSnapshotConfigOverrides.Length + arguments.Count);
+            args.AddRange(GitSnapshotConfigOverrides);
+            foreach (var argument in arguments)
+            {
+                args.Add(argument);
+            }
+
+            return RunProcessAsync(
+                gitExecutable,
+                args,
+                workingDirectory,
+                onStdout,
+                onStderr,
+                cancellationToken);
+        }
+
         public static string GetRepositoryRoot()
         {
             var dataPath = Path.GetFullPath(Application.dataPath);

@@ -7,7 +7,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 {
     public static class MusiderunMenu
     {
-        private const string MenuRoot = "Tools/works.mmzk.util.musiderun/";
+        private const string MenuRoot = "Tools/musiderun/";
         private const string CleanMenuPath = MenuRoot + "Clean Mirror Worktrees...";
         private const string CleanDialogTitle = "Clean Mirror Worktrees";
 

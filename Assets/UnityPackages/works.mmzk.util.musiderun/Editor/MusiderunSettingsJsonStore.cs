@@ -24,14 +24,16 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                         displayName = "Build",
                         targetOS = nameof(BatchJobTargetOS.macOS),
                         batchArguments =
-                            "-executeMethod Works.Mmzk.Util.Musiderun.Editor.BatchBuildEntry.Execute"
+                            "-executeMethod Works.Mmzk.Util.Musiderun.Editor.BatchBuildEntry.Execute",
+                        artifactFolder = "Builds"
                     },
                     new BatchJobDefinitionData
                     {
                         id = "tests",
                         displayName = "Run Tests",
                         targetOS = nameof(BatchJobTargetOS.Any),
-                        batchArguments = "-runTests -testPlatform editmode"
+                        batchArguments = "-runTests -testPlatform editmode",
+                        artifactFolder = "TestResults"
                     }
                 }
             };

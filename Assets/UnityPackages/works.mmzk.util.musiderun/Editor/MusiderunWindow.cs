@@ -319,6 +319,17 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                         }
                     }
 
+                    if (IsTestJob(job))
+                    {
+                        using (new EditorGUI.DisabledScope(!CanOpenTestResults(jobIndex, job)))
+                        {
+                            if (GUILayout.Button("Open Tests", GUILayout.Width(80f)))
+                            {
+                                TryOpenTestResultsAsHtml(jobIndex, job);
+                            }
+                        }
+                    }
+
                     if (!string.IsNullOrWhiteSpace(job.artifactFolder))
                     {
                         var artifactPath = PlatformUtility.ResolveArtifactFolder(_settingsData, job);
@@ -845,6 +856,22 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 htmlPath = path;
             }
 
+            var testResultsHtmlPath = execution?.TestResultsHtmlFilePath ?? result?.TestResultsHtmlFilePath;
+            var testSummary = result?.TestSummary;
+            if (IsTestJob(job))
+            {
+                var testContext = ResolveTestResultsContext(jobIndex, job);
+                if (string.IsNullOrEmpty(testResultsHtmlPath))
+                {
+                    testResultsHtmlPath = testContext.HtmlFilePath;
+                }
+
+                if (testSummary == null || !testSummary.Parsed)
+                {
+                    testSummary = testContext.Request.TestSummary;
+                }
+            }
+
             var request = new BatchJobLogHtmlRequest
             {
                 JobId = job?.id ?? result?.JobId ?? "unknown",
@@ -856,13 +883,134 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 MirrorLogFilePath = mirrorLogPath,
                 UnityLogFilePath = unityLogPath,
                 OutputHtmlPath = htmlPath,
-                TestSummary = result?.TestSummary,
+                TestSummary = testSummary,
+                TestResultsHtmlFilePath = testResultsHtmlPath ?? string.Empty,
                 ErrorMessage = result?.ErrorMessage ?? string.Empty
             };
 
             return new LogOpenContext
             {
                 UnityLogFilePath = unityLogPath,
+                HtmlFilePath = htmlPath,
+                Request = request,
+                IsRunning = isRunning
+            };
+        }
+
+        private static bool IsTestJob(BatchJobDefinitionData job)
+        {
+            if (job == null || string.IsNullOrWhiteSpace(job.batchArguments))
+            {
+                return false;
+            }
+
+            return BatchJobCommandLineParser.ContainsArgument(
+                BatchJobCommandLineParser.Parse(job.batchArguments),
+                "-runTests");
+        }
+
+        private bool CanOpenTestResults(int jobIndex, BatchJobDefinitionData job)
+        {
+            var context = ResolveTestResultsContext(jobIndex, job);
+            return !string.IsNullOrEmpty(context.ResultsXmlPath) && File.Exists(context.ResultsXmlPath);
+        }
+
+        private void TryOpenTestResultsAsHtml(int jobIndex, BatchJobDefinitionData job)
+        {
+            try
+            {
+                var context = ResolveTestResultsContext(jobIndex, job);
+                if (string.IsNullOrEmpty(context.ResultsXmlPath) || !File.Exists(context.ResultsXmlPath))
+                {
+                    throw new FileNotFoundException("テスト結果 XML が見つかりません。");
+                }
+
+                var shouldRegenerate = context.IsRunning ||
+                    string.IsNullOrEmpty(context.HtmlFilePath) ||
+                    !File.Exists(context.HtmlFilePath);
+
+                if (shouldRegenerate)
+                {
+                    if (!TestResultHtmlRenderer.TryRender(context.Request, out var error))
+                    {
+                        throw new InvalidOperationException($"HTML テスト結果の生成に失敗: {error}");
+                    }
+                }
+
+                PlatformUtility.OpenPathWithDefaultApplication(context.HtmlFilePath);
+            }
+            catch (Exception ex)
+            {
+                EditorUtility.DisplayDialog("Open Tests", ex.Message, "OK");
+            }
+        }
+
+        private TestResultsOpenContext ResolveTestResultsContext(int jobIndex, BatchJobDefinitionData job)
+        {
+            BatchJobExecution execution = null;
+            BatchJobResult result = null;
+            var isRunning = false;
+
+            if (jobIndex >= 0)
+            {
+                Orchestrator.Executions.TryGetValue(GetSelectionKey(jobIndex), out execution);
+                result = execution?.Result;
+                isRunning = execution?.State == BatchJobState.Running;
+            }
+
+            if (result == null && job != null && _lastBatchResult?.Results != null)
+            {
+                foreach (var batchResult in _lastBatchResult.Results)
+                {
+                    if (string.Equals(batchResult.JobId, job.id, StringComparison.Ordinal))
+                    {
+                        result = batchResult;
+                        break;
+                    }
+                }
+            }
+
+            var executionForResolve = execution ?? new BatchJobExecution
+            {
+                Definition = job,
+                MirrorPath = result?.MirrorPath ?? execution?.MirrorPath ?? string.Empty,
+                LogFilePath = execution?.LogFilePath ?? result?.LogFilePath ?? string.Empty,
+                TestResultsPath = execution?.TestResultsPath ?? result?.TestResultsPath ?? string.Empty
+            };
+
+            if (executionForResolve.Definition == null && job != null)
+            {
+                executionForResolve.Definition = job;
+            }
+
+            var resultsXmlPath = TestResultParser.ResolveResultsXmlPath(executionForResolve);
+            if (string.IsNullOrEmpty(resultsXmlPath))
+            {
+                resultsXmlPath = execution?.TestResultsPath ?? result?.TestResultsPath ?? string.Empty;
+            }
+
+            var htmlPath = execution?.TestResultsHtmlFilePath ?? result?.TestResultsHtmlFilePath;
+            if (string.IsNullOrEmpty(htmlPath) && !string.IsNullOrEmpty(resultsXmlPath))
+            {
+                htmlPath = Path.ChangeExtension(resultsXmlPath, ".html");
+            }
+
+            var request = new TestResultHtmlRequest
+            {
+                JobId = job?.id ?? result?.JobId ?? "unknown",
+                DisplayName = job?.displayName ?? result?.DisplayName ?? "Batch Job",
+                FinalState = result?.FinalState ?? execution?.State ?? BatchJobState.Running,
+                StartedAt = result?.StartedAt ?? execution?.StartedAt ?? DateTime.Now,
+                FinishedAt = result?.FinishedAt,
+                ResultsXmlPath = resultsXmlPath,
+                OutputHtmlPath = htmlPath,
+                TestSummary = result?.TestSummary ?? TestResultParser.Parse(resultsXmlPath),
+                ErrorMessage = result?.ErrorMessage ?? string.Empty
+            };
+
+            return new TestResultsOpenContext
+            {
+                ResultsXmlPath = resultsXmlPath,
                 HtmlFilePath = htmlPath,
                 Request = request,
                 IsRunning = isRunning
@@ -907,6 +1055,14 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             public string UnityLogFilePath { get; set; } = string.Empty;
             public string HtmlFilePath { get; set; } = string.Empty;
             public BatchJobLogHtmlRequest Request { get; set; }
+            public bool IsRunning { get; set; }
+        }
+
+        private sealed class TestResultsOpenContext
+        {
+            public string ResultsXmlPath { get; set; } = string.Empty;
+            public string HtmlFilePath { get; set; } = string.Empty;
+            public TestResultHtmlRequest Request { get; set; }
             public bool IsRunning { get; set; }
         }
 

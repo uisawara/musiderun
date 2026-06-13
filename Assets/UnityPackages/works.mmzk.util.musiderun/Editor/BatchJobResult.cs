@@ -16,6 +16,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         public string LogHtmlFilePath { get; set; } = string.Empty;
         public string BuildOutputPath { get; set; } = string.Empty;
         public string TestResultsPath { get; set; } = string.Empty;
+        public string TestResultsHtmlFilePath { get; set; } = string.Empty;
         public string BatchArguments { get; set; } = string.Empty;
         public TestResultSummary TestSummary { get; set; }
         public string ErrorMessage { get; set; } = string.Empty;

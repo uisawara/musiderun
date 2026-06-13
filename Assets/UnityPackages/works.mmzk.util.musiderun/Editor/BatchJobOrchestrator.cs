@@ -21,6 +21,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         public string LogFilePath { get; set; } = string.Empty;
         public string LogHtmlFilePath { get; set; } = string.Empty;
         public string TestResultsPath { get; set; } = string.Empty;
+        public string TestResultsHtmlFilePath { get; set; } = string.Empty;
         public DateTime StartedAt { get; set; }
     }
 
@@ -614,6 +615,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
 
             TryGenerateHtmlReport(execution, execution.Result);
+            TryGenerateTestResultsHtmlReport(execution, execution.Result);
             _mirrorLogWriter.Unregister(execution.Definition.id);
             MusiderunSessionState.Remove(execution.Definition.id);
             NotifyJobsChanged();
@@ -634,6 +636,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 LogFilePath = execution.LogFilePath,
                 LogHtmlFilePath = execution.LogHtmlFilePath,
                 TestResultsPath = execution.TestResultsPath,
+                TestResultsHtmlFilePath = execution.TestResultsHtmlFilePath,
                 BatchArguments = execution.Definition.batchArguments,
                 ErrorMessage = message,
                 StartedAt = execution.StartedAt,
@@ -642,6 +645,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             BatchJobLastRunStore.SetLastFinishedAt(execution.Definition.id, execution.Result.FinishedAt.Value);
             execution.State = BatchJobState.Failed;
             TryGenerateHtmlReport(execution, execution.Result);
+            TryGenerateTestResultsHtmlReport(execution, execution.Result);
             _mirrorLogWriter.Unregister(execution.Definition.id);
             MusiderunSessionState.Remove(execution.Definition.id);
             NotifyJobsChanged();
@@ -682,6 +686,8 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             {
                 testResultsPath = TestResultParser.ResolveResultsXmlPath(execution);
                 testSummary = TestResultParser.Parse(testResultsPath);
+                execution.TestResultsPath = testResultsPath;
+                execution.TestResultsHtmlFilePath = Path.ChangeExtension(testResultsPath, ".html");
             }
 
             var failed = IsJobFailed(exitCode, buildOutput, testSummary, execution);
@@ -720,6 +726,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 LogHtmlFilePath = execution.LogHtmlFilePath,
                 BuildOutputPath = buildOutput,
                 TestResultsPath = testResultsPath,
+                TestResultsHtmlFilePath = execution.TestResultsHtmlFilePath,
                 BatchArguments = execution.Definition.batchArguments,
                 TestSummary = testSummary,
                 ErrorMessage = errorMessage,
@@ -750,15 +757,26 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             var isTests = BatchJobCommandLineParser.ContainsArgument(
                 BatchJobCommandLineParser.Parse(execution.Definition.batchArguments),
                 "-runTests");
-            if (isTests && !string.IsNullOrWhiteSpace(execution.Definition.artifactFolder))
+            if (isTests)
             {
-                var artifactDirectory = PlatformUtility.ResolveArtifactFolder(data, execution.Definition);
-                Directory.CreateDirectory(artifactDirectory);
-                execution.TestResultsPath = Path.Combine(artifactDirectory, resultsFileName);
+                string resultsDirectory;
+                if (!string.IsNullOrWhiteSpace(execution.Definition.artifactFolder))
+                {
+                    resultsDirectory = PlatformUtility.ResolveArtifactFolder(data, execution.Definition);
+                    Directory.CreateDirectory(resultsDirectory);
+                }
+                else
+                {
+                    resultsDirectory = logDirectory;
+                }
+
+                execution.TestResultsPath = Path.Combine(resultsDirectory, resultsFileName);
+                execution.TestResultsHtmlFilePath = Path.ChangeExtension(execution.TestResultsPath, ".html");
             }
             else
             {
-                execution.TestResultsPath = Path.Combine(logDirectory, resultsFileName);
+                execution.TestResultsPath = string.Empty;
+                execution.TestResultsHtmlFilePath = string.Empty;
             }
 
             _mirrorLogWriter.Register(execution);
@@ -783,6 +801,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 UnityLogFilePath = execution.LogFilePath,
                 OutputHtmlPath = execution.LogHtmlFilePath,
                 TestSummary = result.TestSummary,
+                TestResultsHtmlFilePath = result.TestResultsHtmlFilePath,
                 ErrorMessage = result.ErrorMessage
             };
 
@@ -802,6 +821,48 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
 
             _log($"[WARN] [{result.JobId}] HTML ログの生成に失敗: {lastError}");
+        }
+
+        private void TryGenerateTestResultsHtmlReport(BatchJobExecution execution, BatchJobResult result)
+        {
+            if (execution == null ||
+                result == null ||
+                string.IsNullOrEmpty(execution.TestResultsHtmlFilePath) ||
+                string.IsNullOrEmpty(result.TestResultsPath) ||
+                !File.Exists(result.TestResultsPath))
+            {
+                return;
+            }
+
+            var request = new TestResultHtmlRequest
+            {
+                JobId = result.JobId,
+                DisplayName = result.DisplayName,
+                FinalState = result.FinalState,
+                StartedAt = result.StartedAt,
+                FinishedAt = result.FinishedAt,
+                ResultsXmlPath = result.TestResultsPath,
+                OutputHtmlPath = execution.TestResultsHtmlFilePath,
+                TestSummary = result.TestSummary,
+                ErrorMessage = result.ErrorMessage
+            };
+
+            const int maxAttempts = 5;
+            var lastError = string.Empty;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                if (TestResultHtmlRenderer.TryRender(request, out lastError))
+                {
+                    return;
+                }
+
+                if (attempt < maxAttempts - 1)
+                {
+                    Thread.Sleep(150);
+                }
+            }
+
+            _log($"[WARN] [{result.JobId}] HTML テスト結果の生成に失敗: {lastError}");
         }
 
         private bool IsJobFailed(

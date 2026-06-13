@@ -28,6 +28,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         public string logOutputDirectory = string.Empty;
         public string mirrorWorktreeBasePath = string.Empty;
         public string mirrorBranchPrefix = "musiderun/mirror";
+        public string defaultWorkingBranch = "main";
         public BatchJobDefinitionData[] jobs = Array.Empty<BatchJobDefinitionData>();
     }
 }

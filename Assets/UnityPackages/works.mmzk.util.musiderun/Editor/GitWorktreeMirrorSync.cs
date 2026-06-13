@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -44,6 +43,10 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 : MirrorWorktreeStatus.NotCreated;
         }
 
+        /// <summary>
+        /// メインリポジトリの HEAD コミットの内容を、detached なミラー worktree へ反映する。
+        /// メイン作業ツリー・index には一切触れない（コミット済みの内容のみが対象）。
+        /// </summary>
         public async Task SyncJobAsync(
             MusiderunSettingsData data,
             BatchJobDefinitionData job,
@@ -52,52 +55,34 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             await RepositoryGitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await EditorMainThreadDispatcher.RunAsync(() =>
+                var context = RequireContext(data, job.id);
+
+                var commit = await ResolveHeadCommitAsync(
+                        context.GitExecutable,
+                        context.RepositoryRoot,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (string.IsNullOrEmpty(commit))
                 {
-                    AssetDatabase.SaveAssets();
-                    AssetDatabase.StartAssetEditing();
-                }).ConfigureAwait(false);
-
-                try
-                {
-                    var context = RequireContext(data, job.id);
-                    var stateBefore = await CaptureWorkingTreeStateAsync(
-                            context.GitExecutable,
-                            context.RepositoryRoot,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-
-                    _log($"[{job.id}] === ミラー同期 ===");
-                    _log($"[{job.id}] リポジトリ: {context.RepositoryRoot}");
-                    _log($"[{job.id}] ミラー: {context.MirrorPath}");
-                    _log($"[{job.id}] ブランチ: {context.BranchName}");
-
-                    await CreateSnapshotAndResetAsync(
-                            context.GitExecutable,
-                            context.RepositoryRoot,
-                            context.MirrorPath,
-                            context.BranchName,
-                            job.id,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-
-                    var stateAfter = await CaptureWorkingTreeStateAsync(
-                            context.GitExecutable,
-                            context.RepositoryRoot,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-
-                    if (!string.Equals(stateBefore, stateAfter, StringComparison.Ordinal))
-                    {
-                        throw new InvalidOperationException(
-                            "ミラー同期後にメイン作業ツリーの状態が変化しました。安全のため Job を中断しました。");
-                    }
+                    throw new InvalidOperationException(
+                        "コミットがありません。最初のコミットを作成してから Job を実行してください。");
                 }
-                finally
-                {
-                    await EditorMainThreadDispatcher.RunAsync(AssetDatabase.StopAssetEditing)
-                        .ConfigureAwait(false);
-                }
+
+                _log($"[{job.id}] === ミラー同期 ===");
+                _log($"[{job.id}] リポジトリ: {context.RepositoryRoot}");
+                _log($"[{job.id}] ミラー: {context.MirrorPath}");
+                _log($"[{job.id}] コミット: {ShortCommit(commit)}");
+
+                await SyncMirrorToCommitAsync(
+                        context.GitExecutable,
+                        context.RepositoryRoot,
+                        context.MirrorPath,
+                        commit,
+                        _log,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                _log($"[{job.id}] 同期完了。");
             }
             finally
             {
@@ -115,6 +100,86 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             EditorSceneManager.SaveOpenScenes();
             AssetDatabase.SaveAssets();
             return true;
+        }
+
+        /// <summary>
+        /// メインリポジトリに未コミットの変更（追跡ファイルの変更・ステージ・未追跡ファイル）が
+        /// あるかどうかを同期的に判定する。ミラーはコミット済み（HEAD）のみを対象とするため、
+        /// Run 前にユーザーへ警告するための補助。
+        /// </summary>
+        /// <param name="statusSummary">`git status --porcelain` の出力（変更がある場合）。</param>
+        /// <returns>未コミットの変更がある場合 true。git 不在・非リポジトリ・取得失敗時は false。</returns>
+        public static bool HasUncommittedChanges(out string statusSummary)
+        {
+            statusSummary = string.Empty;
+
+            if (!PlatformUtility.TryResolveGitExecutable(out var gitExecutable, out _))
+            {
+                return false;
+            }
+
+            var repositoryRoot = PlatformUtility.GetRepositoryRoot();
+            if (!Directory.Exists(Path.Combine(repositoryRoot, ".git")) &&
+                !File.Exists(Path.Combine(repositoryRoot, ".git")))
+            {
+                return false;
+            }
+
+            var result = PlatformUtility.RunGitSnapshotProcessAsync(
+                    gitExecutable,
+                    new[] { "status", "--porcelain" },
+                    repositoryRoot)
+                .GetAwaiter()
+                .GetResult();
+
+            if (!result.Succeeded)
+            {
+                return false;
+            }
+
+            var output = result.StandardOutput.Trim();
+            if (string.IsNullOrEmpty(output))
+            {
+                return false;
+            }
+
+            statusSummary = output;
+            return true;
+        }
+
+        /// <summary>
+        /// ミラー worktree を、指定コミット（通常はメインの HEAD）の内容へ同期する。
+        /// worktree が無ければ detached HEAD で作成し、その後 reset --hard する。
+        /// メインリポジトリの作業ツリー・index・ブランチには影響しない。
+        /// </summary>
+        internal static async Task SyncMirrorToCommitAsync(
+            string gitExecutable,
+            string repositoryRoot,
+            string mirrorPath,
+            string commit,
+            Action<string> log,
+            CancellationToken cancellationToken)
+        {
+            log ??= _ => { };
+
+            await EnsureDetachedWorktreeAsync(
+                    gitExecutable,
+                    repositoryRoot,
+                    mirrorPath,
+                    commit,
+                    log,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            await RunGitOrThrowAsync(
+                    gitExecutable,
+                    mirrorPath,
+                    log,
+                    cancellationToken,
+                    "reset",
+                    "--hard",
+                    commit)
+                .ConfigureAwait(false);
         }
 
         private bool TryGetContext(
@@ -146,11 +211,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return false;
             }
 
-            context = new MirrorContext(
-                gitExecutable,
-                repositoryRoot,
-                mirrorPath,
-                PlatformUtility.ResolveMirrorBranch(data, jobId));
+            context = new MirrorContext(gitExecutable, repositoryRoot, mirrorPath);
             return true;
         }
 
@@ -173,137 +234,29 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             return new MirrorContext(
                 gitExecutable,
                 repositoryRoot,
-                PlatformUtility.ResolveMirrorPath(data, jobId),
-                PlatformUtility.ResolveMirrorBranch(data, jobId));
+                PlatformUtility.ResolveMirrorPath(data, jobId));
         }
 
-        private async Task CreateSnapshotAndResetAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            string mirrorPath,
-            string branchName,
-            string jobId,
-            CancellationToken cancellationToken)
-        {
-            await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "add", "-A")
-                .ConfigureAwait(false);
-
-            var treeResult = await RunGitAsync(gitExecutable, repositoryRoot, cancellationToken, "write-tree")
-                .ConfigureAwait(false);
-            var treeHash = treeResult.StandardOutput.Trim();
-            if (string.IsNullOrEmpty(treeHash))
-            {
-                throw new InvalidOperationException("git write-tree が空のハッシュを返しました。");
-            }
-
-            var branchExists = await BranchExistsAsync(
-                    gitExecutable,
-                    repositoryRoot,
-                    branchName,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            var parentHash = branchExists
-                ? await TryGetBranchHeadAsync(gitExecutable, repositoryRoot, branchName, cancellationToken)
-                    .ConfigureAwait(false)
-                : string.Empty;
-            var message = $"batchjob snapshot {jobId} {DateTime.Now:yyyy-MM-ddTHH:mm:ss}";
-
-            ProcessResult commitResult;
-            if (string.IsNullOrEmpty(parentHash))
-            {
-                commitResult = await RunGitAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        cancellationToken,
-                        "commit-tree",
-                        treeHash,
-                        "-m",
-                        message)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                commitResult = await RunGitAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        cancellationToken,
-                        "commit-tree",
-                        treeHash,
-                        "-p",
-                        parentHash,
-                        "-m",
-                        message)
-                    .ConfigureAwait(false);
-            }
-
-            var commitHash = commitResult.StandardOutput.Trim();
-            if (string.IsNullOrEmpty(commitHash))
-            {
-                throw new InvalidOperationException("git commit-tree が空のハッシュを返しました。");
-            }
-
-            if (!branchExists)
-            {
-                _log($"[{jobId}] mirror ブランチを作成します: {branchName}");
-                await RunGitAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        cancellationToken,
-                        "branch",
-                        branchName,
-                        commitHash)
-                    .ConfigureAwait(false);
-            }
-
-            if (!await IsWorktreeRegisteredAsync(gitExecutable, repositoryRoot, mirrorPath, cancellationToken)
-                    .ConfigureAwait(false))
-            {
-                await EnsureWorktreeAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        mirrorPath,
-                        branchName,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            _log($"[{jobId}] ミラー worktree を同期します: {commitHash[..Math.Min(8, commitHash.Length)]}");
-            await RunGitAsync(gitExecutable, mirrorPath, cancellationToken, "reset", "--hard", commitHash)
-                .ConfigureAwait(false);
-
-            await RestoreMainIndexAsync(gitExecutable, repositoryRoot, cancellationToken)
-                .ConfigureAwait(false);
-
-            _log($"[{jobId}] 同期完了。");
-        }
-
-        private static async Task RestoreMainIndexAsync(
+        private static async Task<string> ResolveHeadCommitAsync(
             string gitExecutable,
             string repositoryRoot,
             CancellationToken cancellationToken)
         {
-            await RunGitSnapshotOrThrowAsync(
+            var result = await PlatformUtility.RunProcessAsync(
                     gitExecutable,
-                    repositoryRoot,
-                    cancellationToken,
-                    "reset",
-                    "--mixed",
-                    "HEAD")
-                .ConfigureAwait(false);
-
-            await PlatformUtility.RunGitSnapshotProcessAsync(
-                    gitExecutable,
-                    new[] { "update-index", "--refresh" },
+                    new[] { "rev-parse", "HEAD" },
                     repositoryRoot,
                     cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            return result.Succeeded ? result.StandardOutput.Trim() : string.Empty;
         }
 
-        private async Task EnsureWorktreeAsync(
+        private static async Task EnsureDetachedWorktreeAsync(
             string gitExecutable,
             string repositoryRoot,
             string mirrorPath,
-            string branchName,
+            string commit,
+            Action<string> log,
             CancellationToken cancellationToken)
         {
             if (await IsWorktreeRegisteredAsync(gitExecutable, repositoryRoot, mirrorPath, cancellationToken)
@@ -323,7 +276,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
             if (Directory.Exists(mirrorPath))
             {
-                _log($"[WARN] 未登録のミラーディレクトリを削除します: {mirrorPath}");
+                log($"[WARN] 未登録のミラーディレクトリを削除します: {mirrorPath}");
                 if (!PlatformUtility.TryDeleteMirrorDirectory(mirrorPath, out var deleteError))
                 {
                     throw new InvalidOperationException(
@@ -331,15 +284,17 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 }
             }
 
-            _log($"worktree を追加します: {mirrorPath}");
-            await RunGitAsync(
+            log($"worktree を追加します: {mirrorPath}");
+            await RunGitOrThrowAsync(
                     gitExecutable,
                     repositoryRoot,
+                    log,
                     cancellationToken,
                     "worktree",
                     "add",
+                    "--detach",
                     mirrorPath,
-                    branchName)
+                    commit)
                 .ConfigureAwait(false);
         }
 
@@ -356,58 +311,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 .ConfigureAwait(false);
         }
 
-        private static async Task<string> CaptureWorkingTreeStateAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            CancellationToken cancellationToken)
-        {
-            var result = await PlatformUtility.RunGitSnapshotProcessAsync(
-                    gitExecutable,
-                    new[] { "stash", "create", "--include-untracked" },
-                    repositoryRoot,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!result.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    $"git stash create が失敗しました (exit {result.ExitCode}): {result.StandardError}");
-            }
-
-            return result.StandardOutput.Trim();
-        }
-
-        private async Task<bool> BranchExistsAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            string branchName,
-            CancellationToken cancellationToken)
-        {
-            var result = await PlatformUtility.RunProcessAsync(
-                    gitExecutable,
-                    new[] { "rev-parse", "--verify", branchName },
-                    repositoryRoot,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            return result.Succeeded;
-        }
-
-        private async Task<string> TryGetBranchHeadAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            string branchName,
-            CancellationToken cancellationToken)
-        {
-            var result = await PlatformUtility.RunProcessAsync(
-                    gitExecutable,
-                    new[] { "rev-parse", branchName },
-                    repositoryRoot,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            return result.Succeeded ? result.StandardOutput.Trim() : string.Empty;
-        }
-
-        private async Task<bool> IsWorktreeRegisteredAsync(
+        private static async Task<bool> IsWorktreeRegisteredAsync(
             string gitExecutable,
             string repositoryRoot,
             string mirrorPath,
@@ -443,55 +347,21 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             return false;
         }
 
-        private async Task<ProcessResult> RunGitAsync(
+        private static async Task<ProcessResult> RunGitOrThrowAsync(
             string gitExecutable,
             string workingDirectory,
+            Action<string> log,
             CancellationToken cancellationToken,
             params string[] arguments)
         {
-            EditorMainThreadDispatcher.Enqueue(() =>
-                _log($"> git -c core.autocrlf=false -c core.safecrlf=false {string.Join(" ", arguments)}"));
+            log($"> git -c core.autocrlf=false -c core.safecrlf=false {string.Join(" ", arguments)}");
 
-            return await RunGitSnapshotOrThrowAsync(
-                    gitExecutable,
-                    workingDirectory,
-                    cancellationToken,
-                    line => _log(line),
-                    line => _log($"[stderr] {line}"),
-                    arguments)
-                .ConfigureAwait(false);
-        }
-
-        private static async Task<ProcessResult> RunGitSnapshotOrThrowAsync(
-            string gitExecutable,
-            string workingDirectory,
-            CancellationToken cancellationToken,
-            params string[] arguments)
-        {
-            return await RunGitSnapshotOrThrowAsync(
-                    gitExecutable,
-                    workingDirectory,
-                    cancellationToken,
-                    null,
-                    null,
-                    arguments)
-                .ConfigureAwait(false);
-        }
-
-        private static async Task<ProcessResult> RunGitSnapshotOrThrowAsync(
-            string gitExecutable,
-            string workingDirectory,
-            CancellationToken cancellationToken,
-            Action<string> onStdout,
-            Action<string> onStderr,
-            params string[] arguments)
-        {
             var result = await PlatformUtility.RunGitSnapshotProcessAsync(
                     gitExecutable,
                     arguments,
                     workingDirectory,
-                    onStdout,
-                    onStderr,
+                    line => log(line),
+                    line => log($"[stderr] {line}"),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -501,10 +371,18 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     ? result.StandardOutput
                     : result.StandardError;
                 throw new InvalidOperationException(
-                    $"git コマンドが失敗しました (exit {result.ExitCode}): git -c core.autocrlf=false -c core.safecrlf=false {string.Join(" ", arguments)}\n{details}");
+                    $"git コマンドが失敗しました (exit {result.ExitCode}): " +
+                    $"git -c core.autocrlf=false -c core.safecrlf=false {string.Join(" ", arguments)}\n{details}");
             }
 
             return result;
+        }
+
+        private static string ShortCommit(string commit)
+        {
+            return string.IsNullOrEmpty(commit)
+                ? commit
+                : commit[..Math.Min(8, commit.Length)];
         }
 
         private sealed class MirrorContext
@@ -512,19 +390,16 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             public MirrorContext(
                 string gitExecutable,
                 string repositoryRoot,
-                string mirrorPath,
-                string branchName)
+                string mirrorPath)
             {
                 GitExecutable = gitExecutable;
                 RepositoryRoot = repositoryRoot;
                 MirrorPath = mirrorPath;
-                BranchName = branchName;
             }
 
             public string GitExecutable { get; }
             public string RepositoryRoot { get; }
             public string MirrorPath { get; }
-            public string BranchName { get; }
         }
     }
 }

@@ -276,6 +276,14 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         {
             try
             {
+                EnsureGitignoreEntries(data);
+
+                if (GitWorktreeMirrorSync.HasUncommittedChanges(out _))
+                {
+                    _log("[WARN] 未コミットの変更があります。ミラーはコミット済み (HEAD) のみを対象とするため、" +
+                         "これらの変更はビルド/テストに反映されません。");
+                }
+
                 foreach (var jobIndex in runnableIndices)
                 {
                     _operationCts.Token.ThrowIfCancellationRequested();
@@ -338,7 +346,49 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             catch (Exception ex)
             {
                 _log($"[ERROR] {ex.Message}");
-                EditorMainThreadDispatcher.Enqueue(FinishSequentialBatch);
+                EditorMainThreadDispatcher.Enqueue(() =>
+                {
+                    FailPendingJobs(ex.Message);
+                    FinishSequentialBatch();
+                });
+            }
+        }
+
+        private void EnsureGitignoreEntries(MusiderunSettingsData data)
+        {
+            try
+            {
+                var result = MusiderunGitignoreGuard.Ensure(data);
+                if (!result.Changed)
+                {
+                    return;
+                }
+
+                if (result.Created)
+                {
+                    _log($"[INFO] .gitignore を作成しました: {result.GitignorePath}");
+                }
+
+                if (result.Added.Count > 0)
+                {
+                    _log($"[INFO] musiderun が依存する {result.Added.Count} 件のエントリを .gitignore に追加しました: " +
+                         string.Join(", ", result.Added));
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"[WARN] .gitignore の検査・更新に失敗しました（処理は続行します）: {ex.Message}");
+            }
+        }
+
+        private void FailPendingJobs(string message)
+        {
+            foreach (var execution in _executions.Values)
+            {
+                if (execution.State is BatchJobState.Syncing or BatchJobState.Queued)
+                {
+                    FailJob(execution, message);
+                }
             }
         }
 
@@ -635,6 +685,28 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
 
             var failed = IsJobFailed(exitCode, buildOutput, testSummary, execution);
+            var errorMessage = string.Empty;
+
+            // -runTests なのに結果 XML が生成されなかった場合、テストが実行されていない
+            // 可能性が高い。exitCode が 0 でも「成功」とは見なさず Failed として明示する。
+            if (isTests && (testSummary == null || !testSummary.Parsed))
+            {
+                failed = true;
+                errorMessage =
+                    "テスト結果 XML が生成されませんでした。テストが実行されていない可能性があります。" +
+                    "バッチモードで起動時にドメインリロード（再コンパイル/再インポート）が発生すると" +
+                    "テスト実行がスキップされることがあります。ログを確認してください。";
+            }
+            // 結果 XML はあるがテストが 1 件も実行されていない場合も Failed とする。
+            // テストアセンブリ (asmdef) の設定不備などで検出 0 件のまま「成功」と
+            // 誤判定されるのを防ぐ。
+            else if (isTests && testSummary.Total <= 0)
+            {
+                failed = true;
+                errorMessage =
+                    "テストが 1 件も実行されませんでした。テストアセンブリ (asmdef) の設定や" +
+                    "テストの検出条件を確認してください。";
+            }
 
             return new BatchJobResult
             {
@@ -650,6 +722,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 TestResultsPath = testResultsPath,
                 BatchArguments = execution.Definition.batchArguments,
                 TestSummary = testSummary,
+                ErrorMessage = errorMessage,
                 StartedAt = execution.StartedAt,
                 FinishedAt = DateTime.Now
             };

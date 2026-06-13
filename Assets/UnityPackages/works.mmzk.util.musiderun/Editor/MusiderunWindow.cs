@@ -240,6 +240,11 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     {
                         OpenJsonSettings();
                     }
+
+                    if (GUILayout.Button("Check .gitignore", GUILayout.Width(120f), GUILayout.Height(28f)))
+                    {
+                        MusiderunMenu.CheckGitignoreEntries();
+                    }
                 }
             }
 
@@ -354,6 +359,11 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 }
             }
 
+            if (!ConfirmUncommittedChanges())
+            {
+                return;
+            }
+
             BeginOperation();
             Orchestrator.StartJobsAsync(_settingsData, jobIndices);
         }
@@ -373,8 +383,52 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return;
             }
 
+            if (!ConfirmUncommittedChanges())
+            {
+                return;
+            }
+
             BeginOperation();
             Orchestrator.StartJobsAsync(_settingsData, new[] { jobIndex });
+        }
+
+        /// <summary>
+        /// 未コミットの変更がある場合、ミラー（コミット済み HEAD のみ対象）に反映されない旨を
+        /// 警告し、続行可否を確認する。変更が無い場合や git 不在時はそのまま true を返す。
+        /// </summary>
+        private bool ConfirmUncommittedChanges()
+        {
+            if (!GitWorktreeMirrorSync.HasUncommittedChanges(out var statusSummary))
+            {
+                return true;
+            }
+
+            var preview = BuildUncommittedPreview(statusSummary, maxLines: 15);
+            return EditorUtility.DisplayDialog(
+                "未コミットの変更があります",
+                "ミラーはコミット済み (HEAD) の内容のみを対象とするため、以下の未コミット変更は" +
+                "ビルド/テストに反映されません。\n\n" +
+                preview +
+                "\n\n反映したい場合は commit してから実行してください。このまま実行しますか？",
+                "実行する",
+                "キャンセル");
+        }
+
+        private static string BuildUncommittedPreview(string statusSummary, int maxLines)
+        {
+            if (string.IsNullOrEmpty(statusSummary))
+            {
+                return string.Empty;
+            }
+
+            var lines = statusSummary.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+            if (lines.Length <= maxLines)
+            {
+                return string.Join("\n", lines);
+            }
+
+            var head = string.Join("\n", lines, 0, maxLines);
+            return head + $"\n... 他 {lines.Length - maxLines} 件";
         }
 
         private void SetAllSelections(bool selected)
@@ -423,7 +477,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
 
             EditorGUILayout.Space(4f);
-            EditorGUILayout.LabelField("Last Result", EditorStyles.boldLabel);
 
             var messageType = _lastBatchResult.FailedCount > 0 ? MessageType.Error : MessageType.Info;
             var summary = new StringBuilder();
@@ -449,7 +502,41 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 }
             }
 
-            EditorGUILayout.HelpBox(summary.ToString().TrimEnd(), messageType);
+            var summaryText = summary.ToString().TrimEnd();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Last Result", EditorStyles.boldLabel);
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Copy", GUILayout.Width(60f)))
+                {
+                    EditorGUIUtility.systemCopyBuffer = summaryText;
+                    ShowNotification(new GUIContent("Last Result をコピーしました"));
+                }
+            }
+
+            // 状態が一目で分かるよう色付きアイコンは HelpBox で残しつつ、
+            // 本文は範囲選択＆コピーできるよう SelectableLabel で表示する。
+            var icon = messageType == MessageType.Error
+                ? EditorGUIUtility.IconContent("console.erroricon")
+                : EditorGUIUtility.IconContent("console.infoicon");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label(icon.image, GUILayout.Width(28f), GUILayout.Height(28f));
+
+                var selectableStyle = new GUIStyle(EditorStyles.textArea)
+                {
+                    wordWrap = true,
+                    richText = false
+                };
+                var width = Mathf.Max(50f, EditorGUIUtility.currentViewWidth - 60f);
+                var height = selectableStyle.CalcHeight(new GUIContent(summaryText), width);
+                EditorGUILayout.SelectableLabel(
+                    summaryText,
+                    selectableStyle,
+                    GUILayout.ExpandWidth(true),
+                    GUILayout.Height(height));
+            }
         }
 
         private void DrawLogView()

@@ -1,5 +1,9 @@
 {
     "name": "Tests",
+    "references": [
+        "works.mmzk.util.musiderun",
+        "works.mmzk.util.musiderun.editor"
+    ],
     "optionalUnityReferences": [
         "TestAssemblies"
     ],

@@ -10,11 +10,66 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         private const string MenuRoot = "Tools/musiderun/";
         private const string CleanMenuPath = MenuRoot + "Clean Mirror Worktrees...";
         private const string CleanDialogTitle = "Clean Mirror Worktrees";
+        private const string GitignoreMenuPath = MenuRoot + "Check .gitignore Entries";
+        private const string GitignoreDialogTitle = "Check .gitignore Entries";
 
         [MenuItem(MenuRoot + "Open Window")]
         public static void OpenWindow()
         {
             MusiderunWindow.ShowWindow();
+        }
+
+        [MenuItem(GitignoreMenuPath, false, 50)]
+        public static void CheckGitignoreEntries()
+        {
+            var data = MusiderunSettingsJsonStore.LoadOrDefault();
+            var check = MusiderunGitignoreGuard.Check(data);
+
+            if (check.IsSatisfied)
+            {
+                EditorUtility.DisplayDialog(
+                    GitignoreDialogTitle,
+                    "musiderun が依存するエントリはすべて .gitignore に登録済みです。\n\n" +
+                    $"確認対象:\n{string.Join("\n", check.Required)}",
+                    "OK");
+                return;
+            }
+
+            if (!EditorUtility.DisplayDialog(
+                    GitignoreDialogTitle,
+                    "以下のエントリが .gitignore に未登録です。これらが追跡対象のままだと Job 実行が中断されることがあります。\n\n" +
+                    $"{string.Join("\n", check.Missing)}\n\n" +
+                    $"対象ファイル: {check.GitignorePath}\n\n追加しますか？",
+                    "追加する",
+                    "キャンセル"))
+            {
+                return;
+            }
+
+            try
+            {
+                var ensure = MusiderunGitignoreGuard.Ensure(data);
+                var message = new StringBuilder();
+                if (ensure.Created)
+                {
+                    message.AppendLine($".gitignore を作成しました: {ensure.GitignorePath}");
+                }
+
+                if (ensure.Added.Count > 0)
+                {
+                    message.AppendLine("以下のエントリを追加しました:");
+                    foreach (var added in ensure.Added)
+                    {
+                        message.AppendLine($"  /**/{added}/");
+                    }
+                }
+
+                EditorUtility.DisplayDialog(GitignoreDialogTitle, message.ToString().TrimEnd(), "OK");
+            }
+            catch (Exception ex)
+            {
+                EditorUtility.DisplayDialog(GitignoreDialogTitle, $".gitignore の更新に失敗しました:\n{ex.Message}", "OK");
+            }
         }
 
         [MenuItem(MenuRoot + "Create Settings JSON")]

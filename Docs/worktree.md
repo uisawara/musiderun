@@ -32,6 +32,7 @@ parent/
 
 - **Play モード中は Job を実行できません**（未保存の変更をディスクに書き出せないため）
 - メインプロジェクトの未コミット変更は Job 実行で消えません（ミラー worktree / mirror ブランチのみ更新）
+- メイン worktree が誤って `musiderun/mirror-*` ブランチ上にある場合は Job 実行前に通常ブランチへ自動復帰します。復帰先が存在しないときは `defaultWorkingBranch`（既定 `main`）を新規作成して復帰します（詳細は [mirror-sync.md](mirror-sync.md)）
 
 ## 関連ドキュメント
 

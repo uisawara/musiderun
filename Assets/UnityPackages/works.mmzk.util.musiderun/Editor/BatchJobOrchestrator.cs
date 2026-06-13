@@ -276,6 +276,11 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         {
             try
             {
+                EnsureGitignoreEntries(data);
+
+                await GitWorktreeMirrorSync.ValidateMainWorktreeBranchAsync(data, _log, _operationCts.Token)
+                    .ConfigureAwait(false);
+
                 foreach (var jobIndex in runnableIndices)
                 {
                     _operationCts.Token.ThrowIfCancellationRequested();
@@ -338,7 +343,49 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             catch (Exception ex)
             {
                 _log($"[ERROR] {ex.Message}");
-                EditorMainThreadDispatcher.Enqueue(FinishSequentialBatch);
+                EditorMainThreadDispatcher.Enqueue(() =>
+                {
+                    FailPendingJobs(ex.Message);
+                    FinishSequentialBatch();
+                });
+            }
+        }
+
+        private void EnsureGitignoreEntries(MusiderunSettingsData data)
+        {
+            try
+            {
+                var result = MusiderunGitignoreGuard.Ensure(data);
+                if (!result.Changed)
+                {
+                    return;
+                }
+
+                if (result.Created)
+                {
+                    _log($"[INFO] .gitignore を作成しました: {result.GitignorePath}");
+                }
+
+                if (result.Added.Count > 0)
+                {
+                    _log($"[INFO] musiderun が依存する {result.Added.Count} 件のエントリを .gitignore に追加しました: " +
+                         string.Join(", ", result.Added));
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"[WARN] .gitignore の検査・更新に失敗しました（処理は続行します）: {ex.Message}");
+            }
+        }
+
+        private void FailPendingJobs(string message)
+        {
+            foreach (var execution in _executions.Values)
+            {
+                if (execution.State is BatchJobState.Syncing or BatchJobState.Queued)
+                {
+                    FailJob(execution, message);
+                }
             }
         }
 

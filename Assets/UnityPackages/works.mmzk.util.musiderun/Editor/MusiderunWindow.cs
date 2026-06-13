@@ -240,6 +240,11 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     {
                         OpenJsonSettings();
                     }
+
+                    if (GUILayout.Button("Check .gitignore", GUILayout.Width(120f), GUILayout.Height(28f)))
+                    {
+                        MusiderunMenu.CheckGitignoreEntries();
+                    }
                 }
             }
 
@@ -423,7 +428,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
 
             EditorGUILayout.Space(4f);
-            EditorGUILayout.LabelField("Last Result", EditorStyles.boldLabel);
 
             var messageType = _lastBatchResult.FailedCount > 0 ? MessageType.Error : MessageType.Info;
             var summary = new StringBuilder();
@@ -449,7 +453,41 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 }
             }
 
-            EditorGUILayout.HelpBox(summary.ToString().TrimEnd(), messageType);
+            var summaryText = summary.ToString().TrimEnd();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Last Result", EditorStyles.boldLabel);
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Copy", GUILayout.Width(60f)))
+                {
+                    EditorGUIUtility.systemCopyBuffer = summaryText;
+                    ShowNotification(new GUIContent("Last Result をコピーしました"));
+                }
+            }
+
+            // 状態が一目で分かるよう色付きアイコンは HelpBox で残しつつ、
+            // 本文は範囲選択＆コピーできるよう SelectableLabel で表示する。
+            var icon = messageType == MessageType.Error
+                ? EditorGUIUtility.IconContent("console.erroricon")
+                : EditorGUIUtility.IconContent("console.infoicon");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label(icon.image, GUILayout.Width(28f), GUILayout.Height(28f));
+
+                var selectableStyle = new GUIStyle(EditorStyles.textArea)
+                {
+                    wordWrap = true,
+                    richText = false
+                };
+                var width = Mathf.Max(50f, EditorGUIUtility.currentViewWidth - 60f);
+                var height = selectableStyle.CalcHeight(new GUIContent(summaryText), width);
+                EditorGUILayout.SelectableLabel(
+                    summaryText,
+                    selectableStyle,
+                    GUILayout.ExpandWidth(true),
+                    GUILayout.Height(height));
+            }
         }
 
         private void DrawLogView()

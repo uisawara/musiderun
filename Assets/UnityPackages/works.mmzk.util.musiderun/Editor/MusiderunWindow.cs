@@ -11,6 +11,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
     public sealed class MusiderunWindow : EditorWindow
     {
         private const int MaxLogLines = 50;
+        private const float StateIconSize = 18f;
         private const string SelectedPrefPrefix = "musiderun.selected.";
         private const string LogFoldoutPrefKey = "musiderun.logFoldout";
 
@@ -169,7 +170,8 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             EditorGUILayout.Space(4f);
             using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
             {
-                EditorGUILayout.LabelField("Batch", GetBatchStateLabel(), EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("Batch", GUILayout.Width(45f));
+                DrawStateLabel(GetBatchState(), EditorStyles.boldLabel);
                 if (Orchestrator.IsBusy)
                 {
                     var elapsed = DateTime.Now - _operationStartedAt;
@@ -178,19 +180,19 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
         }
 
-        private string GetBatchStateLabel()
+        private BatchJobState GetBatchState()
         {
             if (Orchestrator.IsBusy)
             {
-                return "▶ Running";
+                return BatchJobState.Running;
             }
 
             if (_lastBatchResult != null)
             {
-                return _lastBatchResult.FailedCount > 0 ? "❌ Failed" : "✅ Completed";
+                return _lastBatchResult.FailedCount > 0 ? BatchJobState.Failed : BatchJobState.Completed;
             }
 
-            return "— Idle";
+            return BatchJobState.Idle;
         }
 
         private void DrawJobsSection()
@@ -307,7 +309,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
                     EditorGUILayout.LabelField(job.displayName, EditorStyles.boldLabel, GUILayout.Width(120f));
                     EditorGUILayout.LabelField(job.targetOS, GUILayout.Width(70f));
-                    EditorGUILayout.LabelField(GetStateLabel(state), GUILayout.Width(120f));
+                    DrawStateLabel(state, EditorStyles.label, GUILayout.Width(130f));
                     EditorGUILayout.LabelField(GetJobElapsedLabel(jobIndex, job, state), GUILayout.Width(70f));
 
                     var logPath = ResolveOpenLogPath(jobIndex, job);
@@ -1083,21 +1085,57 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             }
         }
 
-        private static string GetStateLabel(BatchJobState state)
+        private static void DrawStateLabel(BatchJobState state, GUIStyle style, params GUILayoutOption[] options)
+        {
+            using (new EditorGUILayout.HorizontalScope(options))
+            {
+                var icon = GetStateIconContent(state);
+                if (icon?.image != null)
+                {
+                    GUILayout.Label(icon, GUILayout.Width(StateIconSize), GUILayout.Height(StateIconSize));
+                }
+                else
+                {
+                    GUILayout.Space(StateIconSize);
+                }
+
+                EditorGUILayout.LabelField(GetStateText(state), style);
+            }
+        }
+
+        private static string GetStateText(BatchJobState state)
         {
             return state switch
             {
-                BatchJobState.Idle => "— Idle",
-                BatchJobState.Queued => "⏳ Queued",
-                BatchJobState.MirrorCreating => "🔧 Creating",
-                BatchJobState.MirrorDestroying => "🗑 Destroying",
-                BatchJobState.Syncing => "🔄 Syncing",
-                BatchJobState.Running => "▶ Running",
-                BatchJobState.Completed => "✅ Completed",
-                BatchJobState.Failed => "❌ Failed",
-                BatchJobState.Skipped => "⏭ Skipped",
+                BatchJobState.Idle => "Idle",
+                BatchJobState.Queued => "Queued",
+                BatchJobState.MirrorCreating => "Creating",
+                BatchJobState.MirrorDestroying => "Destroying",
+                BatchJobState.Syncing => "Syncing",
+                BatchJobState.Running => "Running",
+                BatchJobState.Completed => "Completed",
+                BatchJobState.Failed => "Failed",
+                BatchJobState.Skipped => "Skipped",
                 _ => state.ToString()
             };
+        }
+
+        private static GUIContent GetStateIconContent(BatchJobState state)
+        {
+            var iconName = state switch
+            {
+                BatchJobState.Queued => "WaitSpin00",
+                BatchJobState.MirrorCreating => "Prefab Icon",
+                BatchJobState.MirrorDestroying => "TreeEditor.Trash",
+                BatchJobState.Syncing => "Refresh",
+                BatchJobState.Running => "PlayButton",
+                BatchJobState.Completed => "TestPassed",
+                BatchJobState.Failed => "TestFailed",
+                BatchJobState.Skipped => "TestIgnored",
+                _ => null
+            };
+
+            return string.IsNullOrEmpty(iconName) ? null : EditorGUIUtility.IconContent(iconName);
         }
 
         private static bool IsActiveJobState(BatchJobState state)

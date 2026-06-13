@@ -278,9 +278,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             {
                 EnsureGitignoreEntries(data);
 
-                await GitWorktreeMirrorSync.ValidateMainWorktreeBranchAsync(data, _log, _operationCts.Token)
-                    .ConfigureAwait(false);
-
                 foreach (var jobIndex in runnableIndices)
                 {
                     _operationCts.Token.ThrowIfCancellationRequested();

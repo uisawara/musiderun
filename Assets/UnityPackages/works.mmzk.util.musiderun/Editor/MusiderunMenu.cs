@@ -139,7 +139,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
                         details.AppendLine();
                         details.AppendLine($"Removed worktrees: {result.RemovedWorktrees}");
-                        details.AppendLine($"Removed branches: {result.RemovedBranches}");
                         if (result.RemovedFallbackBatchJobLogs)
                         {
                             details.AppendLine("Removed fallback BatchJobLogs folder.");
@@ -153,7 +152,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     message.AppendLine("Cleanup completed.");
                     message.AppendLine();
                     message.AppendLine($"Removed worktrees: {result.RemovedWorktrees}");
-                    message.AppendLine($"Removed branches: {result.RemovedBranches}");
                     if (result.RemovedFallbackBatchJobLogs)
                     {
                         message.AppendLine("Removed fallback BatchJobLogs folder.");

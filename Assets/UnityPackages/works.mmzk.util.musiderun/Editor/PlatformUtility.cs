@@ -42,8 +42,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             string workingDirectory,
             Action<string> onStdout = null,
             Action<string> onStderr = null,
-            CancellationToken cancellationToken = default,
-            IReadOnlyDictionary<string, string> environment = null)
+            CancellationToken cancellationToken = default)
         {
             var args = new List<string>(GitSnapshotConfigOverrides.Length + arguments.Count);
             args.AddRange(GitSnapshotConfigOverrides);
@@ -58,8 +57,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 workingDirectory,
                 onStdout,
                 onStderr,
-                cancellationToken,
-                environment);
+                cancellationToken);
         }
 
         public static string GetRepositoryRoot()
@@ -312,8 +310,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             string workingDirectory,
             Action<string> onStdout = null,
             Action<string> onStderr = null,
-            CancellationToken cancellationToken = default,
-            IReadOnlyDictionary<string, string> environment = null)
+            CancellationToken cancellationToken = default)
         {
             var tcs = new TaskCompletionSource<ProcessResult>();
             var stdout = new List<string>();
@@ -332,14 +329,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             foreach (var argument in arguments)
             {
                 startInfo.ArgumentList.Add(argument);
-            }
-
-            if (environment != null)
-            {
-                foreach (var pair in environment)
-                {
-                    startInfo.EnvironmentVariables[pair.Key] = pair.Value;
-                }
             }
 
             var process = new Process

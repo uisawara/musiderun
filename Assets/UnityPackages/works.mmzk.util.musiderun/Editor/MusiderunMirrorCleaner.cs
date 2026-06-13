@@ -11,7 +11,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
     public sealed class MusiderunMirrorCleanResult
     {
         public int RemovedWorktrees { get; set; }
-        public int RemovedBranches { get; set; }
         public bool RemovedFallbackBatchJobLogs { get; set; }
         public List<string> Warnings { get; } = new();
         public bool HasWarnings => Warnings.Count > 0;
@@ -46,12 +45,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             await GitWorktreeMirrorSync.RepositoryGitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var originalBranch = await GetCurrentBranchAsync(
-                        gitExecutable,
-                        repositoryRoot,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
                 var jobs = data.jobs ?? Array.Empty<BatchJobDefinitionData>();
                 for (var i = 0; i < jobs.Length; i++)
                 {
@@ -76,7 +69,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                         continue;
                     }
 
-                    var branchName = PlatformUtility.ResolveMirrorBranch(data, job.id);
                     var status = await sync.GetMirrorStatusAsync(data, job.id, cancellationToken)
                         .ConfigureAwait(false);
 
@@ -112,35 +104,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
                             break;
                     }
-
-                    if (await BranchExistsAsync(gitExecutable, repositoryRoot, branchName, cancellationToken)
-                            .ConfigureAwait(false))
-                    {
-                        var currentBranch = await GetCurrentBranchAsync(
-                                gitExecutable,
-                                repositoryRoot,
-                                cancellationToken)
-                            .ConfigureAwait(false);
-
-                        if (string.Equals(currentBranch, branchName, StringComparison.Ordinal))
-                        {
-                            result.Warnings.Add(
-                                $"[{job.id}] Skipped branch deletion because it is checked out: {branchName}");
-                        }
-                        else if (await TryDeleteBranchAsync(
-                                     gitExecutable,
-                                     repositoryRoot,
-                                     branchName,
-                                     cancellationToken)
-                                 .ConfigureAwait(false))
-                        {
-                            result.RemovedBranches++;
-                        }
-                        else
-                        {
-                            result.Warnings.Add($"[{job.id}] Failed to delete branch: {branchName}");
-                        }
-                    }
                 }
 
                 var fallbackPath = PlatformUtility.GetRepositoryBatchJobLogsPath();
@@ -159,22 +122,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
                 await PruneStaleWorktreesAsync(gitExecutable, repositoryRoot, cancellationToken)
                     .ConfigureAwait(false);
-
-                if (!string.IsNullOrEmpty(originalBranch) &&
-                    !string.Equals(
-                        await GetCurrentBranchAsync(gitExecutable, repositoryRoot, cancellationToken)
-                            .ConfigureAwait(false),
-                        originalBranch,
-                        StringComparison.Ordinal))
-                {
-                    await RunGitAsync(
-                            gitExecutable,
-                            repositoryRoot,
-                            cancellationToken,
-                            "checkout",
-                            originalBranch)
-                        .ConfigureAwait(false);
-                }
 
                 MusiderunSessionState.Clear();
             }
@@ -202,21 +149,6 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             return processResult.Succeeded;
         }
 
-        private static async Task<bool> TryDeleteBranchAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            string branchName,
-            CancellationToken cancellationToken)
-        {
-            var processResult = await PlatformUtility.RunProcessAsync(
-                    gitExecutable,
-                    new[] { "branch", "-D", branchName },
-                    repositoryRoot,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            return processResult.Succeeded;
-        }
-
         private static async Task PruneStaleWorktreesAsync(
             string gitExecutable,
             string repositoryRoot,
@@ -230,56 +162,5 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 .ConfigureAwait(false);
         }
 
-        private static async Task<string> GetCurrentBranchAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            CancellationToken cancellationToken)
-        {
-            var result = await PlatformUtility.RunProcessAsync(
-                    gitExecutable,
-                    new[] { "rev-parse", "--abbrev-ref", "HEAD" },
-                    repositoryRoot,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            return result.Succeeded ? result.StandardOutput.Trim() : string.Empty;
-        }
-
-        private static async Task<bool> BranchExistsAsync(
-            string gitExecutable,
-            string repositoryRoot,
-            string branchName,
-            CancellationToken cancellationToken)
-        {
-            var result = await PlatformUtility.RunProcessAsync(
-                    gitExecutable,
-                    new[] { "rev-parse", "--verify", branchName },
-                    repositoryRoot,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-            return result.Succeeded;
-        }
-
-        private static async Task RunGitAsync(
-            string gitExecutable,
-            string workingDirectory,
-            CancellationToken cancellationToken,
-            params string[] arguments)
-        {
-            var result = await PlatformUtility.RunProcessAsync(
-                    gitExecutable,
-                    arguments,
-                    workingDirectory,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!result.Succeeded)
-            {
-                var details = string.IsNullOrWhiteSpace(result.StandardError)
-                    ? result.StandardOutput
-                    : result.StandardError;
-                throw new InvalidOperationException(
-                    $"git command failed (exit {result.ExitCode}): git {string.Join(" ", arguments)}\n{details}");
-            }
-        }
     }
 }

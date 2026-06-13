@@ -64,6 +64,10 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             @"\[(?:\d{1,3}m|40m|32m|39m|22m|49m|1m|33m)",
             RegexOptions.Compiled);
 
+        private static readonly Regex ExceptionMessagePattern = new(
+            @"\b[A-Z]\w*Exception:\s",
+            RegexOptions.Compiled);
+
         private static readonly (string Id, string DisplayName, LogLabelCategory Category)[] KnownLabels =
         {
             (LabelError, "Error", LogLabelCategory.Severity),
@@ -221,7 +225,8 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return SectionLicensing;
             }
 
-            if (line.Contains("[Package Manager]", StringComparison.Ordinal) ||
+            if (line.StartsWith("Start importing", StringComparison.Ordinal) ||
+                line.Contains("[Package Manager]", StringComparison.Ordinal) ||
                 line.Contains("Application.AssetDatabase", StringComparison.Ordinal) ||
                 line.Contains("Asset Pipeline Refresh", StringComparison.Ordinal))
             {
@@ -295,7 +300,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         private static bool ContainsErrorSignal(string line)
         {
             if (line.Contains("[ERROR]", StringComparison.Ordinal) ||
-                line.Contains("[stderr]", StringComparison.Ordinal) ||
+                IsMirrorStderrError(line) ||
                 line.Contains("error CS", StringComparison.OrdinalIgnoreCase) ||
                 line.Contains("Compilation failed", StringComparison.OrdinalIgnoreCase) ||
                 line.Contains("No tests were executed", StringComparison.OrdinalIgnoreCase) ||
@@ -310,8 +315,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return true;
             }
 
-            if (line.Contains("Exception", StringComparison.Ordinal) &&
-                !line.Contains("EmitExceptionAsError", StringComparison.Ordinal))
+            if (ContainsExceptionSignal(line))
             {
                 return true;
             }
@@ -325,12 +329,109 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             return false;
         }
 
+        private static bool IsMirrorStderrError(string line)
+        {
+            const string stderrMarker = "[stderr]";
+            var markerIndex = line.IndexOf(stderrMarker, StringComparison.Ordinal);
+            if (markerIndex < 0)
+            {
+                return false;
+            }
+
+            var content = line.Substring(markerIndex + stderrMarker.Length).TrimStart();
+            if (content.StartsWith("fatal:", StringComparison.OrdinalIgnoreCase) ||
+                content.StartsWith("error:", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool ContainsExceptionSignal(string line)
+        {
+            if (line.Contains("EmitExceptionAsError", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (line.StartsWith("Start importing", StringComparison.Ordinal) &&
+                line.Contains(" using Guid(", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (ExceptionMessagePattern.IsMatch(line))
+            {
+                return true;
+            }
+
+            return line.Contains("Unhandled exception", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool ContainsWarningSignal(string line)
         {
             return line.Contains("[WARN]", StringComparison.Ordinal) ||
                    line.Contains("LogWarning", StringComparison.Ordinal) ||
                    line.Contains(" warn:", StringComparison.OrdinalIgnoreCase) ||
-                   line.Contains("Warning", StringComparison.Ordinal);
+                   line.Contains("Warning", StringComparison.Ordinal) ||
+                   ContainsImplicitUnityWarningSignal(line);
+        }
+
+        private static bool ContainsImplicitUnityWarningSignal(string line)
+        {
+            if (line.StartsWith("Start importing", StringComparison.Ordinal) &&
+                line.Contains(" using Guid(", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (line.Contains("warning CS", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (line.StartsWith("Shader '", StringComparison.Ordinal) &&
+                line.Contains(" not found", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (line.Contains("fallback shader", StringComparison.OrdinalIgnoreCase) &&
+                line.Contains(" not found", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (line.Contains("Subshader", StringComparison.Ordinal) &&
+                line.Contains(" not found", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (line.Contains("The referenced script", StringComparison.Ordinal) &&
+                line.Contains("missing", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (line.Contains("no valid script is attached", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (line.Contains("A meta data file", StringComparison.Ordinal) &&
+                line.Contains("can't be found", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (line.Contains("Problem detected while importing", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }

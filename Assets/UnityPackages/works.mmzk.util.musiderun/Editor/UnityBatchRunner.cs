@@ -228,10 +228,12 @@ namespace Works.Mmzk.Util.Musiderun.Editor
 
         private static IReadOnlyList<string> BuildArguments(UnityBatchRunRequest request)
         {
+            var extraArguments = BatchJobCommandLineParser.Parse(request.BatchArguments);
+            var isRunTests = BatchJobCommandLineParser.ContainsArgument(extraArguments, "-runTests");
+
             var arguments = new List<string>
             {
                 "-batchmode",
-                "-quit",
                 "-nographics",
                 "-projectPath",
                 request.ProjectPath,
@@ -239,7 +241,15 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 request.LogFilePath
             };
 
-            var extraArguments = BatchJobCommandLineParser.Parse(request.BatchArguments);
+            // -runTests 使用時に -quit を併用すると、起動時のドメインリロード直後に
+            // テスト実行前で Editor が終了し、結果が出力されないことがある
+            // (Unity 公式も -runTests と -quit の併用を非推奨としている)。
+            // テストランナーは実行完了後に自動で終了するため、ここでは付与しない。
+            if (!isRunTests)
+            {
+                arguments.Insert(1, "-quit");
+            }
+
             var hasTestResults = false;
 
             for (var i = 0; i < extraArguments.Count; i++)
@@ -253,7 +263,7 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 }
             }
 
-            if (BatchJobCommandLineParser.ContainsArgument(extraArguments, "-runTests") &&
+            if (isRunTests &&
                 !hasTestResults &&
                 !string.IsNullOrEmpty(request.TestResultsPath))
             {

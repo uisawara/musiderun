@@ -103,6 +103,51 @@ namespace Works.Mmzk.Util.Musiderun.Editor
         }
 
         /// <summary>
+        /// メインリポジトリに未コミットの変更（追跡ファイルの変更・ステージ・未追跡ファイル）が
+        /// あるかどうかを同期的に判定する。ミラーはコミット済み（HEAD）のみを対象とするため、
+        /// Run 前にユーザーへ警告するための補助。
+        /// </summary>
+        /// <param name="statusSummary">`git status --porcelain` の出力（変更がある場合）。</param>
+        /// <returns>未コミットの変更がある場合 true。git 不在・非リポジトリ・取得失敗時は false。</returns>
+        public static bool HasUncommittedChanges(out string statusSummary)
+        {
+            statusSummary = string.Empty;
+
+            if (!PlatformUtility.TryResolveGitExecutable(out var gitExecutable, out _))
+            {
+                return false;
+            }
+
+            var repositoryRoot = PlatformUtility.GetRepositoryRoot();
+            if (!Directory.Exists(Path.Combine(repositoryRoot, ".git")) &&
+                !File.Exists(Path.Combine(repositoryRoot, ".git")))
+            {
+                return false;
+            }
+
+            var result = PlatformUtility.RunGitSnapshotProcessAsync(
+                    gitExecutable,
+                    new[] { "status", "--porcelain" },
+                    repositoryRoot)
+                .GetAwaiter()
+                .GetResult();
+
+            if (!result.Succeeded)
+            {
+                return false;
+            }
+
+            var output = result.StandardOutput.Trim();
+            if (string.IsNullOrEmpty(output))
+            {
+                return false;
+            }
+
+            statusSummary = output;
+            return true;
+        }
+
+        /// <summary>
         /// ミラー worktree を、指定コミット（通常はメインの HEAD）の内容へ同期する。
         /// worktree が無ければ detached HEAD で作成し、その後 reset --hard する。
         /// メインリポジトリの作業ツリー・index・ブランチには影響しない。

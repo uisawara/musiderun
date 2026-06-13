@@ -359,6 +359,11 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 }
             }
 
+            if (!ConfirmUncommittedChanges())
+            {
+                return;
+            }
+
             BeginOperation();
             Orchestrator.StartJobsAsync(_settingsData, jobIndices);
         }
@@ -378,8 +383,52 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                 return;
             }
 
+            if (!ConfirmUncommittedChanges())
+            {
+                return;
+            }
+
             BeginOperation();
             Orchestrator.StartJobsAsync(_settingsData, new[] { jobIndex });
+        }
+
+        /// <summary>
+        /// 未コミットの変更がある場合、ミラー（コミット済み HEAD のみ対象）に反映されない旨を
+        /// 警告し、続行可否を確認する。変更が無い場合や git 不在時はそのまま true を返す。
+        /// </summary>
+        private bool ConfirmUncommittedChanges()
+        {
+            if (!GitWorktreeMirrorSync.HasUncommittedChanges(out var statusSummary))
+            {
+                return true;
+            }
+
+            var preview = BuildUncommittedPreview(statusSummary, maxLines: 15);
+            return EditorUtility.DisplayDialog(
+                "未コミットの変更があります",
+                "ミラーはコミット済み (HEAD) の内容のみを対象とするため、以下の未コミット変更は" +
+                "ビルド/テストに反映されません。\n\n" +
+                preview +
+                "\n\n反映したい場合は commit してから実行してください。このまま実行しますか？",
+                "実行する",
+                "キャンセル");
+        }
+
+        private static string BuildUncommittedPreview(string statusSummary, int maxLines)
+        {
+            if (string.IsNullOrEmpty(statusSummary))
+            {
+                return string.Empty;
+            }
+
+            var lines = statusSummary.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+            if (lines.Length <= maxLines)
+            {
+                return string.Join("\n", lines);
+            }
+
+            var head = string.Join("\n", lines, 0, maxLines);
+            return head + $"\n... 他 {lines.Length - maxLines} 件";
         }
 
         private void SetAllSelections(bool selected)

@@ -103,8 +103,8 @@ namespace Works.Mmzk.Util.Musiderun.Editor
             if (!EditorUtility.DisplayDialog(
                     CleanDialogTitle,
                     "This will permanently delete all mirror worktrees, their working directories, " +
-                    "associated mirror branches (musiderun/mirror-*), and the fallback BatchJobLogs " +
-                    "folder in the repository root.\n\nThis cannot be undone. Continue?",
+                    "and the fallback BatchJobLogs folder in the repository root.\n\n" +
+                    "This cannot be undone. Continue?",
                     "Clean",
                     "Cancel"))
             {

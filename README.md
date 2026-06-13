@@ -25,8 +25,8 @@ git clone https://github.com/uisawara/musiderun.git
 ```
 
 1. Unity Hub でクローンしたプロジェクトを開く
-2. `Tools/works.mmzk.util.musiderun/Create Settings JSON` で設定ファイルを作成（未作成の場合）
-3. `Tools/works.mmzk.util.musiderun/Open Window` でウィンドウを開く
+2. `Tools/musiderun/Create Settings JSON` で設定ファイルを作成（未作成の場合）
+3. `Tools/musiderun/Open Window` でウィンドウを開く
 
 ### B. 既存プロジェクトへ UPM（Git URL）で導入
 
@@ -35,7 +35,7 @@ git clone https://github.com/uisawara/musiderun.git
 ```json
 {
   "dependencies": {
-    "works.mmzk.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun"
+    "com.mmzkworks.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun"
   }
 }
 ```
@@ -43,13 +43,13 @@ git clone https://github.com/uisawara/musiderun.git
 バージョンを Git タグで固定する場合（`package.json` の `version` とタグ名を揃える）:
 
 ```json
-"works.mmzk.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun#v1.0.0"
+"com.mmzkworks.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun#v0.0.2"
 ```
 
 導入後:
 
-1. `Tools/works.mmzk.util.musiderun/Create Settings JSON` で `Assets/Settings/MusiderunSettings.json` を作成
-2. `Tools/works.mmzk.util.musiderun/Open Window` でウィンドウを開く
+1. `Tools/musiderun/Create Settings JSON` で `Assets/Settings/MusiderunSettings.json` を作成
+2. `Tools/musiderun/Open Window` でウィンドウを開く
 
 > Package Manager の検索には表示されません。`manifest.json` への追記が必要です。
 

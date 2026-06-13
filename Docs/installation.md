@@ -7,8 +7,8 @@
 パッケージは `Assets/UnityPackages/works.mmzk.util.musiderun` に同梱されています。`Packages/manifest.json` への追記は不要です。
 
 1. リポジトリを clone し、Unity でプロジェクトを開く
-2. `Tools/works.mmzk.util.musiderun/Create Settings JSON` で既定 JSON を作成（未作成の場合）
-3. `Tools/works.mmzk.util.musiderun/Open Window` でウィンドウを開く
+2. `Tools/musiderun/Create Settings JSON` で既定 JSON を作成（未作成の場合）
+3. `Tools/musiderun/Open Window` でウィンドウを開く
 
 ## 他プロジェクトへ UPM（Git URL）で導入
 
@@ -17,7 +17,7 @@
 ```json
 {
   "dependencies": {
-    "works.mmzk.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun"
+    "com.mmzkworks.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun"
   }
 }
 ```
@@ -29,7 +29,7 @@
 `package.json` の `version` とタグ名を揃えます。
 
 ```json
-"works.mmzk.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun#v1.0.0"
+"com.mmzkworks.util.musiderun": "https://github.com/uisawara/musiderun.git?path=Assets/UnityPackages/works.mmzk.util.musiderun#v0.0.2"
 ```
 
 導入後は [configuration.md](configuration.md) の手順に従い、初回セットアップを行ってください。
@@ -41,13 +41,13 @@
 | 配置先 | manifest への追記 |
 | ------ | ----------------- |
 | `Assets/UnityPackages/works.mmzk.util.musiderun/` | 不要 |
-| `Packages/works.mmzk.util.musiderun/` | `"works.mmzk.util.musiderun": "file:works.mmzk.util.musiderun"` |
-| プロジェクト外など | `"works.mmzk.util.musiderun": "file:../../path/to/works.mmzk.util.musiderun"`（`Packages/` からの相対パス） |
+| `Packages/works.mmzk.util.musiderun/` | `"com.mmzkworks.util.musiderun": "file:works.mmzk.util.musiderun"` |
+| プロジェクト外など | `"com.mmzkworks.util.musiderun": "file:../../path/to/works.mmzk.util.musiderun"`（`Packages/` からの相対パス） |
 
 ## 初回セットアップ
 
-1. `Tools/works.mmzk.util.musiderun/Create Settings JSON` で `Assets/Settings/MusiderunSettings.json` を作成（未作成の場合）
-2. `Tools/works.mmzk.util.musiderun/Open Window` でウィンドウを開く
+1. `Tools/musiderun/Create Settings JSON` で `Assets/Settings/MusiderunSettings.json` を作成（未作成の場合）
+2. `Tools/musiderun/Open Window` でウィンドウを開く
 
 ## 要件
 

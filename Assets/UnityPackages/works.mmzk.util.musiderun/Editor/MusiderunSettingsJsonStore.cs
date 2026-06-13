@@ -29,10 +29,18 @@ namespace Works.Mmzk.Util.Musiderun.Editor
                     },
                     new BatchJobDefinitionData
                     {
-                        id = "tests",
-                        displayName = "Run Tests",
+                        id = "tests-editmode",
+                        displayName = "Run Tests - EditMode",
                         targetOS = nameof(BatchJobTargetOS.Any),
                         batchArguments = "-runTests -testPlatform editmode",
+                        artifactFolder = "TestResults"
+                    },
+                    new BatchJobDefinitionData
+                    {
+                        id = "tests-playmode",
+                        displayName = "Run Tests - PlayMode",
+                        targetOS = nameof(BatchJobTargetOS.Any),
+                        batchArguments = "-runTests -testPlatform playmode",
                         artifactFolder = "TestResults"
                     }
                 }
